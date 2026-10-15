@@ -39,12 +39,13 @@ def account_env(home: Path) -> dict:
 
 
 class AppServer:
-    def __init__(self, command: list[str], home: Path, timeout: float = 25):
+    def __init__(self, command: list[str], home: Path, timeout: float = 25, cancel_event=None):
         self.command, self.home, self.timeout = command, home, timeout
         self.process = None
         self.messages = queue.Queue(maxsize=128)
         self.stop = threading.Event()
         self.next_id = 0
+        self.cancel_event = cancel_event
 
     def __enter__(self):
         try:
@@ -96,13 +97,15 @@ class AppServer:
         self.send({"id": ident, "method": method, "params": params})
         deadline = time.monotonic() + self.timeout
         while True:
+            if self.cancel_event is not None and self.cancel_event.is_set():
+                raise ProviderError("cancelled", "Refresh cancelled")
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise ProviderError("timeout", "Codex request timed out; retry later")
             try:
-                message = self.messages.get(timeout=remaining)
+                message = self.messages.get(timeout=min(remaining, 0.2))
             except queue.Empty:
-                raise ProviderError("timeout", "Codex request timed out; retry later") from None
+                continue
             if message is None:
                 raise ProviderError("disconnected", "Codex app-server closed unexpectedly")
             if not isinstance(message, dict):
@@ -149,13 +152,14 @@ def verify_account(result: dict, expected: str) -> dict:
 
 
 def refresh(store: Store, account_id: str, binary: str = "codex", timeout: float = 25,
-            server_factory=AppServer) -> dict:
+            server_factory=AppServer, cancel_event=None) -> dict:
     profile = store.account(account_id)
     attempt = time.time()
     try:
         home = store.home(account_id)
         home.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with server_factory([codex_command(binary), "app-server"], home, timeout) as server:
+        server_args = ([codex_command(binary), "app-server"], home, timeout)
+        with server_factory(*server_args, **({"cancel_event": cancel_event} if cancel_event is not None else {})) as server:
             identity = verify_account(server.request("account/read", {"refreshToken": False}), profile["expected_email"])
             limits = normalize_limits(server.request("account/rateLimits/read", {}), profile["limit_id"])
             after = verify_account(server.request("account/read", {"refreshToken": False}), profile["expected_email"])
@@ -165,6 +169,8 @@ def refresh(store: Store, account_id: str, binary: str = "codex", timeout: float
                     "status": "ok", "updated_at": time.time(), "attempted_at": attempt,
                     "identity": identity, **limits}
     except (ProviderError, ValueError) as error:
+        if getattr(error, "code", "") == "cancelled":
+            raise
         # Deliberately clear previous quotas on an error; never show another identity's data.
         snapshot = {"schema_version": 1, "account_id": account_id, "label": profile["label"],
                     "status": "error", "attempted_at": attempt, "updated_at": None,
