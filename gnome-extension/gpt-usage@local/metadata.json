@@ -1,0 +1,8 @@
+{
+  "uuid": "gpt-usage@local",
+  "name": "GPT Usage Indicator",
+  "description": "Codex subscription 5-hour and 7-day quota on the left of the GNOME panel. Requires Python 3 and Codex CLI.",
+  "shell-version": ["46", "47", "48", "49", "50"],
+  "version": 1,
+  "settings-schema": "org.gnome.shell.extensions.gpt-usage"
+}

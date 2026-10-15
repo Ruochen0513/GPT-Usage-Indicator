@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.gpt-usage" path="/org/gnome/shell/extensions/gpt-usage/">
+    <key name="data-directory" type="s"><default>''</default><summary>Absolute directory shared with the CLI; empty uses extension runtime</summary></key>
+    <key name="account" type="s"><default>'personal'</default><summary>Selected account profile id</summary></key>
+    <key name="display-mode" type="s"><default>'combined'</default><choices><choice value="text"/><choice value="rings"/><choice value="bars"/><choice value="combined"/></choices><summary>Panel presentation</summary></key>
+    <key name="show-remaining" type="b"><default>true</default><summary>Display remaining percentage instead of used</summary></key>
+    <key name="refresh-seconds" type="i"><default>120</default><range min="30" max="3600"/><summary>Refresh interval</summary></key>
+    <key name="codex-binary" type="s"><default>'codex'</default><summary>Codex executable; absolute path recommended</summary></key>
+    <key name="python-binary" type="s"><default>'python3'</default><summary>Python 3.10 or newer executable</summary></key>
+  </schema>
+</schemalist>
