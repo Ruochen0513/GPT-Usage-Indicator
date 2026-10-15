@@ -1,10 +1,27 @@
 """Deterministic local JSONL protocol peer: never reads credentials or accesses network."""
 import json
 import sys
+requested, ready = False, False
 for line in sys.stdin:
     msg = json.loads(line)
-    if "id" not in msg or msg.get("method") == "hang":
+    method = msg.get('method')
+    if method == 'initialized':
+        ready = requested
         continue
-    print(json.dumps({"method": "ignored/notification", "params": {}}), flush=True)
-    result = {"rateLimits": {"primary": {"usedPercent": 25, "windowDurationMins": 300}}}
-    print(json.dumps({"id": msg["id"], "result": result}), flush=True)
+    if 'id' not in msg:
+        continue
+    if method == 'initialize':
+        requested = True
+        result = {}
+    elif not ready:
+        print(json.dumps({'id': msg['id'], 'error': {'message': 'Not initialized'}}), flush=True)
+        continue
+    elif method == 'hang':
+        continue
+    elif method == 'raw_error':
+        print(json.dumps({'id': msg['id'], 'error': {'message': 'SECRET_TOKEN_MUST_NOT_ESCAPE'}}), flush=True)
+        continue
+    else:
+        result = {'rateLimits': {'primary': {'usedPercent': 25, 'windowDurationMins': 300}}}
+    print(json.dumps({'method': 'ignored/notification', 'params': {}}), flush=True)
+    print(json.dumps({'id': msg['id'], 'result': result}), flush=True)

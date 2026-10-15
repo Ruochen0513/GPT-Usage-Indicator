@@ -98,6 +98,17 @@ class StorageTests(unittest.TestCase):
             result = refresh(self.store, "work", server_factory=Server)
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["windows"]["five_hour"]["used_percent"], 25)
+        class Switched(Server):
+            def request(self, method, params):
+                result = super().request(method, params)
+                if method == 'account/read' and self.reads == 2:
+                    result['account']['email'] = 'other@test'
+                return result
+        with patch("gpt_usage.provider.codex_command", return_value="codex"):
+            switched = refresh(self.store, "work", server_factory=Switched)
+        self.assertEqual(switched['status'], 'error')
+        self.assertEqual(switched['error']['code'], 'account_mismatch')
+        self.assertNotIn('identity', switched)
 
     def test_env_isolated(self):
         with patch.dict(os.environ, {"OPENAI_API_KEY": "secret", "CODEX_HOME": "elsewhere"}):
@@ -110,6 +121,9 @@ class StorageTests(unittest.TestCase):
         with AppServer([sys.executable, "-B", str(script)], self.store.root, timeout=2) as server:
             response = server.request("account/rateLimits/read", {})
             self.assertIn("rateLimits", response)
+            with self.assertRaises(ProviderError) as caught:
+                server.request('raw_error', {})
+            self.assertNotIn('SECRET_TOKEN', str(caught.exception))
         self.assertIsNotNone(server.process.poll())
 
     def test_transport_timeout(self):
