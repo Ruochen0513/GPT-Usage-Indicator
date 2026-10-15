@@ -33,6 +33,8 @@ class LimitsTests(unittest.TestCase):
         self.assertIsNone(result["windows"]["seven_day"])
         with self.assertRaises(ValueError):
             normalize_limits({"rateLimitsByLimitId": {"other": {"primary": quota()}}})
+        with self.assertRaises(ValueError):
+            normalize_limits({"rateLimitsByLimitId": {}, "rateLimits": {"primary": quota()}})
 
     def test_unknown_durations_and_invalid_numbers(self):
         for value in (None, True, "50", float("nan"), float("inf")):

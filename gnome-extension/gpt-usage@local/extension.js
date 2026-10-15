@@ -42,7 +42,8 @@ export default class GPTUsageExtension extends Extension {
             if (file.query_info('standard::size', Gio.FileQueryInfoFlags.NONE, null).get_size() > 65536)
                 return {};
             const [ok, bytes] = file.load_contents(null);
-            return ok ? JSON.parse(new TextDecoder().decode(bytes)) : {};
+            const value = ok ? JSON.parse(new TextDecoder().decode(bytes)) : {};
+            return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
         } catch (_) {
             return {};
         }

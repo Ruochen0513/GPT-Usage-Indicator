@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 import json
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,10 @@ from .storage import Store, default_data_dir
 
 
 def main(argv=None):
+    # GNOME sends SIGTERM on disable/account switch. Unwind AppServer's context
+    # so its child is terminated too, instead of leaving an orphan process.
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     parser = argparse.ArgumentParser(description="Codex subscription quota indicator")
     parser.add_argument("--data-dir", type=Path, default=default_data_dir())
     parser.add_argument("--codex", default="codex", help="Codex executable (Windows: native codex.exe)")

@@ -12,7 +12,7 @@ def number(value: Any) -> bool:
 
 def normalize_limits(result: dict, limit_id: str = "codex") -> dict:
     buckets = result.get("rateLimitsByLimitId")
-    if isinstance(buckets, dict) and buckets:
+    if isinstance(buckets, dict):
         bucket = buckets.get(limit_id)
         if not isinstance(bucket, dict):
             raise ValueError("Requested quota bucket is unavailable")
