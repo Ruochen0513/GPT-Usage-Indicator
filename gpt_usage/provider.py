@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import queue
 import shutil
 import subprocess
@@ -24,6 +25,24 @@ def codex_command(binary: str) -> str:
     resolved = shutil.which(binary)
     if not resolved:
         raise ProviderError("cli_missing", "Codex CLI not found; configure an absolute executable path")
+    # npm on Windows exposes a .cmd shim. Resolve only known native package
+    # layouts instead of executing shell text. Also bypass POSIX Node shims.
+    path = Path(resolved).resolve()
+    arch = platform.machine().lower()
+    arm = arch in {"aarch64", "arm64"}
+    family = "win32" if platform.system() == "Windows" else "darwin" if platform.system() == "Darwin" else "linux"
+    triple = ("aarch64" if arm else "x86_64") + {"win32": "-pc-windows-msvc", "darwin": "-apple-darwin", "linux": "-unknown-linux-musl"}[family]
+    package = f"codex-{family}-{'arm64' if arm else 'x64'}"
+    roots = [path.parent.parent, path.parent / "node_modules" / "@openai" / "codex"]
+    executable = "codex.exe" if family == "win32" else "codex"
+    for root in roots:
+        vendors = [root / "vendor", root / "node_modules" / "@openai" / package / "vendor",
+                   root.parent / package / "vendor"]
+        for vendor in vendors:
+            for folder in ("bin", "codex"):
+                candidate = vendor / triple / folder / executable
+                if candidate.is_file():
+                    return str(candidate)
     # Batch wrappers require cmd.exe parsing; avoid a shell and quote ambiguity.
     if Path(resolved).suffix.lower() in {".cmd", ".bat"}:
         raise ProviderError("cli_wrapper", "Choose codex.exe (native Codex binary), not the npm .cmd wrapper")

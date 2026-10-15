@@ -123,3 +123,30 @@ class StorageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class CancellationTests(unittest.TestCase):
+    def test_cancel_interrupts_blocked_request_and_reaps_child(self):
+        import threading
+        temp = tempfile.TemporaryDirectory(dir=TEST_ROOT)
+        self.addCleanup(temp.cleanup)
+        event = threading.Event()
+        script = ROOT / 'tests/fixtures/app_server.py'
+        with AppServer([sys.executable, '-B', str(script)], Path(temp.name), timeout=10, cancel_event=event) as server:
+            event.set()
+            with self.assertRaises(ProviderError) as caught:
+                server.request('hang', {})
+            self.assertEqual(caught.exception.code, 'cancelled')
+        self.assertIsNotNone(server.process.poll())
+
+    def test_windows_npm_shim_resolves_native_binary_without_shell(self):
+        from gpt_usage.provider import codex_command
+        temp = tempfile.TemporaryDirectory(dir=TEST_ROOT)
+        self.addCleanup(temp.cleanup)
+        base = Path(temp.name)
+        wrapper = base / 'codex.cmd'
+        wrapper.write_text('@echo off', encoding='utf-8')
+        native = base / 'node_modules/@openai/codex/node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe'
+        native.parent.mkdir(parents=True)
+        native.touch()
+        with patch('gpt_usage.provider.shutil.which', return_value=str(wrapper)), patch('gpt_usage.provider.platform.machine', return_value='AMD64'), patch('gpt_usage.provider.platform.system', return_value='Windows'):
+            self.assertEqual(codex_command('codex'), str(native))

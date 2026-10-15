@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import subprocess
+import shutil
 import sys
 import unittest
 import zipfile
@@ -8,6 +9,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parent.parent
 
 class PackageTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('glib-compile-schemas'), 'GNOME build tools unavailable on this platform')
     def test_self_contained_private_package(self):
         subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/package_extension.py')], check=True, capture_output=True)
         with zipfile.ZipFile(ROOT / 'dist/gpt-usage@local.shell-extension.zip') as archive:

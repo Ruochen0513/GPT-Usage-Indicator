@@ -151,6 +151,10 @@ class UsageWindow:
                 if exc.code != "cancelled": error = str(exc)
             except (OSError, ValueError):
                 error = "Refresh failed; check data directory permissions and account configuration"
+            except Exception:
+                # Always notify Tk so a failed worker cannot leave the window
+                # stuck in SYNCING or prevent clean shutdown.
+                error = "Unexpected provider failure; check your Codex CLI version"
             self.results.put((generation, result, error))
         self.worker = threading.Thread(target=work, daemon=False)
         self.worker.start()

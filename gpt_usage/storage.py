@@ -5,6 +5,7 @@ import json
 import os
 import re
 import tempfile
+import sys
 from pathlib import Path
 
 PROFILE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}$")
@@ -17,6 +18,10 @@ def profile_id(value: str) -> str:
 
 
 def default_data_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        executable = Path(sys.executable).resolve()
+        app = next((parent for parent in executable.parents if parent.suffix == ".app"), None)
+        return (app.parent if app else executable.parent) / ".runtime"
     return Path(__file__).resolve().parent.parent / ".runtime"
 
 
