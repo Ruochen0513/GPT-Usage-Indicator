@@ -177,7 +177,7 @@ def refresh(store: Store, account_id: str, binary: str = "codex", timeout: float
     try:
         home = store.home(account_id)
         home.mkdir(parents=True, exist_ok=True, mode=0o700)
-        server_args = ([codex_command(binary), "app-server"], home, timeout)
+        server_args = ([codex_command(binary), "-c", 'cli_auth_credentials_store="file"', "app-server"], home, timeout)
         with server_factory(*server_args, **({"cancel_event": cancel_event} if cancel_event is not None else {})) as server:
             identity = verify_account(server.request("account/read", {"refreshToken": False}), profile["expected_email"])
             limits = normalize_limits(server.request("account/rateLimits/read", {}), profile["limit_id"])

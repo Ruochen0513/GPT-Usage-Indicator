@@ -179,6 +179,7 @@ export default class GPTUsageExtension extends Extension {
                     cr.rectangle(1, y, width - 2, 5); cr.fill();
                     cr.setSourceRGB(...color(value, remaining));
                     if (value !== null) { cr.rectangle(1, y, (width - 2) * value / 100, 5); cr.fill(); }
+                    else { cr.moveTo(width / 2 - 3, y + 2.5); cr.lineTo(width / 2 + 3, y + 2.5); cr.stroke(); }
                 } else {
                     const x = width * (i === 0 ? 0.25 : 0.75);
                     const y = height / 2;

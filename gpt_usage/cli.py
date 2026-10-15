@@ -43,7 +43,7 @@ def main(argv=None):
             store.account(args.account)
             home = store.home(args.account)
             home.mkdir(parents=True, exist_ok=True, mode=0o700)
-            command = [codex_command(args.codex), "login"]
+            command = [codex_command(args.codex), "-c", 'cli_auth_credentials_store="file"', "login"]
             if args.device_auth:
                 command.append("--device-auth")
             return subprocess.call(command, env=account_env(home), cwd=home)

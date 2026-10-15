@@ -7,7 +7,10 @@ from typing import Any
 
 
 def number(value: Any) -> bool:
-    return isinstance(value, (float, int)) and not isinstance(value, bool) and math.isfinite(value)
+    try:
+        return isinstance(value, (float, int)) and not isinstance(value, bool) and math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def normalize_limits(result: dict, limit_id: str = "codex") -> dict:

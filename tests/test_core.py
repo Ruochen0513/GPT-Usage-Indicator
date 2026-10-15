@@ -37,7 +37,7 @@ class LimitsTests(unittest.TestCase):
             normalize_limits({"rateLimitsByLimitId": {}, "rateLimits": {"primary": quota()}})
 
     def test_unknown_durations_and_invalid_numbers(self):
-        for value in (None, True, "50", float("nan"), float("inf")):
+        for value in (None, True, "50", float("nan"), float("inf"), 10 ** 500):
             self.assertIsNone(normalize_limits({"rateLimits": {"primary": quota(value)}})["windows"]["five_hour"])
         self.assertIsNone(normalize_limits({"rateLimits": {"primary": quota(10, 60)}})["windows"]["five_hour"])
         self.assertEqual(normalize_limits({"rateLimits": {"primary": quota(130)}})["windows"]["five_hour"]["used_percent"], 100)
@@ -150,3 +150,30 @@ class CancellationTests(unittest.TestCase):
         native.touch()
         with patch('gpt_usage.provider.shutil.which', return_value=str(wrapper)), patch('gpt_usage.provider.platform.machine', return_value='AMD64'), patch('gpt_usage.provider.platform.system', return_value='Windows'):
             self.assertEqual(codex_command('codex'), str(native))
+
+class LifecycleTests(unittest.TestCase):
+    @unittest.skipIf(os.name == 'nt', 'POSIX executable and SIGTERM integration test')
+    def test_cli_sigterm_reaps_app_server(self):
+        import time
+        temp = tempfile.TemporaryDirectory(dir=TEST_ROOT)
+        self.addCleanup(temp.cleanup)
+        store = Store(Path(temp.name))
+        store.add('work', 'Work')
+        mock = ROOT / 'tests/fixtures/codex-mock'
+        command = [sys.executable, '-B', '-m', 'gpt_usage', '--data-dir', str(store.root), '--codex', str(mock), 'refresh', '--account', 'work']
+        proc = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            pid_file = store.home('work') / 'mock.pid'
+            deadline = time.monotonic() + 5
+            while not pid_file.exists() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            self.assertTrue(pid_file.exists())
+            pid = int(pid_file.read_text())
+            proc.terminate()
+            self.assertEqual(proc.wait(timeout=5), 143)
+            with self.assertRaises(ProcessLookupError):
+                os.kill(pid, 0)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
