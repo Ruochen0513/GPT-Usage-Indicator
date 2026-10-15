@@ -68,17 +68,19 @@ class AppServer:
 
     def __enter__(self):
         try:
-            self.process = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                            stderr=subprocess.DEVNULL, env=account_env(self.home),
-                                            cwd=self.home, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        except OSError:
-            raise ProviderError("cli_start", "Unable to start Codex app-server") from None
-        self.reader = threading.Thread(target=self._read, daemon=True)
-        self.reader.start()
-        try:
+            try:
+                self.process = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                                stderr=subprocess.DEVNULL, env=account_env(self.home),
+                                                cwd=self.home, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            except OSError:
+                raise ProviderError("cli_start", "Unable to start Codex app-server") from None
+            self.reader = threading.Thread(target=self._read, daemon=True)
+            self.reader.start()
             self.request("initialize", {"clientInfo": {"name": "gpt_usage_indicator", "version": "0.1.0"}})
             self.send({"method": "initialized", "params": {}})
-        except Exception:
+        except BaseException:
+            # A SIGTERM/SystemExit during __enter__ does not trigger the with
+            # statement's __exit__; resource acquisition must unwind it here.
             self.__exit__(None, None, None)
             raise
         return self
@@ -155,7 +157,9 @@ class AppServer:
         for stream in (self.process.stdin, self.process.stdout):
             if stream:
                 stream.close()
-        self.reader.join(timeout=1)
+        reader = getattr(self, "reader", None)
+        if reader is not None and reader.ident is not None:
+            reader.join(timeout=1)
 
 
 def verify_account(result: dict, expected: str) -> dict:

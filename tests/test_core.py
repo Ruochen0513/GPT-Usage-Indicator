@@ -152,6 +152,15 @@ class CancellationTests(unittest.TestCase):
             self.assertEqual(codex_command('codex'), str(native))
 
 class LifecycleTests(unittest.TestCase):
+    def test_system_exit_during_initialization_reaps_child(self):
+        temp = tempfile.TemporaryDirectory(dir=TEST_ROOT)
+        self.addCleanup(temp.cleanup)
+        server = AppServer([sys.executable, '-B', str(ROOT / 'tests/fixtures/app_server.py')], Path(temp.name))
+        with patch.object(server, 'request', side_effect=SystemExit(143)):
+            with self.assertRaises(SystemExit):
+                server.__enter__()
+        self.assertIsNotNone(server.process.poll())
+
     @unittest.skipIf(os.name == 'nt', 'POSIX executable and SIGTERM integration test')
     def test_cli_sigterm_reaps_app_server(self):
         import time
