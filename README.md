@@ -47,6 +47,20 @@ gnome-extensions prefs gpt-usage@local
 
 若浏览器回调不可用，点击 **Device code**，在官方页面输入设置页显示的设备码。设备授权是否可用取决于账号／组织策略。**Cancel** 或关闭设置可取消当前授权；**Sign out** 清除该 profile 的登录与额度。
 
+### GNOME 系统代理与登录 403（v0.2.1）
+
+内置 Codex 0.163.0 的 Linux 系统代理实现不可用，单纯在 GNOME 配置系统代理不一定会传入其后台进程。插件现在通过 GIO 解析系统代理／PAC，将登录与额度目标的路由显式传给各自的 Codex 进程。
+
+设置 → **Network proxy** 提供三种模式：
+
+- **GNOME system proxy / PAC**：默认，解析系统配置。解析失败会提示，不会自动改成直连。
+- **Manual proxy URL**：填写代理客户端的本地 HTTP／混合端口，例如 `http://127.0.0.1:7897`，点击行内 Apply 后再登录。如果该端口实际提供 SOCKS5，可使用 `socks5h://127.0.0.1:端口`。不要在地址中填写用户名或密码。
+- **Inherited launch environment**：仅继承启动环境，供已有环境变量配置的用户使用。
+
+**Check route** 显示登录与额度查询将采用的代理路由，只检查配置，不发送登录请求、检测出口 IP 或确认地区。手动代理会覆盖后台进程中残留的代理变量和绕过列表，并保留 localhost 回调的直连。不会修改系统代理或浏览器设置。
+
+`Country, region, or territory not supported` 是服务端地区拒绝。插件现在单独识别这类错误并保留安全的 request id；代理名称标为新加坡不等于已验证服务端看到的出口。如果已确认位于[支持地区](https://help.openai.com/en/articles/7947663-chatgpt-supported-countries)仍被拒绝，可向官方支持提交发生时间与 request id。
+
 ### Windows
 
 下载 `GPT-Usage-windows-x64.exe`，双击运行即可。EXE 包含 Python/Tk 和 Codex 运行时，不需要安装 Python、Node.js、Codex，也不需要启动终端。
