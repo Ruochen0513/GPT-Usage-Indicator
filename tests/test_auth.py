@@ -111,3 +111,30 @@ class WorkerTests(unittest.TestCase):
             task.cancel()
             task.thread.join(timeout=2)
         self.assertFalse(task.thread.is_alive())
+
+class OperationTests(unittest.TestCase):
+    def test_authorizing_pauses_refresh_and_cleans_marker_on_failure(self):
+        from gpt_usage.provider import refresh
+        temp = tempfile.TemporaryDirectory(dir=TEST_ROOT)
+        self.addCleanup(temp.cleanup)
+        store = Store(Path(temp.name))
+        store.add('personal', 'Personal')
+        with self.assertRaises(RuntimeError):
+            with store.authorization_lock('personal'):
+                self.assertTrue(store.authorizing('personal'))
+                with patch('gpt_usage.provider.codex_command', side_effect=AssertionError('must not start Codex')):
+                    self.assertEqual(refresh(store, 'personal')['status'], 'authorizing')
+                raise RuntimeError('interrupt')
+        self.assertFalse(store.authorizing('personal'))
+
+    def test_operations_are_exclusive_and_kernel_lock_is_released(self):
+        from gpt_usage.storage import OperationBusy
+        temp = tempfile.TemporaryDirectory(dir=TEST_ROOT)
+        self.addCleanup(temp.cleanup)
+        store = Store(Path(temp.name))
+        with store.operation_lock('personal'):
+            with self.assertRaises(OperationBusy):
+                with store.operation_lock('personal'):
+                    self.fail('must not overlap account operations')
+        with store.operation_lock('personal'):
+            pass

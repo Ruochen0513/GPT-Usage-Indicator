@@ -86,7 +86,7 @@ export default class GPTUsageExtension extends Extension {
         this._label.visible = mode === 'text' || mode === 'combined';
         this._label.text = this._view.text + (this._view.status === 'ok' ? '' : ' !');
         this._drawing.queue_repaint();
-        const statusText = this._view.status === 'ok' ? 'Live quota' : this._view.status === 'stale' ? 'Stale · refresh required' : 'Unavailable · check login and configuration';
+        const statusText = this._view.status === 'ok' ? 'Live quota' : this._view.status === 'authorizing' ? 'Sign-in in progress' : this._view.status === 'stale' ? 'Stale · refresh required' : 'Unavailable · check login and configuration';
         this._button.set_accessible_name(`GPT ${this._view.label}: ${this._view.text}, ${remaining ? 'remaining' : 'used'}, ${statusText}`);
         const menu = this._button.menu;
         menu.removeAll();

@@ -6,9 +6,16 @@ import os
 import re
 import tempfile
 import sys
+import time
+import errno
+from contextlib import contextmanager
 from pathlib import Path
 
 PROFILE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}$")
+
+
+class OperationBusy(ValueError):
+    pass
 
 
 def profile_id(value: str) -> str:
@@ -99,3 +106,76 @@ class Store:
         if data.get("schema_version") != 1 or data.get("account_id") != account:
             return {}
         return data
+
+    def authorizing(self, account: str) -> bool:
+        path = self.root / 'accounts' / profile_id(account) / 'authorization.lock'
+        value = read_json(path, {})
+        expires = value.get('expires_at')
+        now = time.time()
+        if isinstance(expires, (int, float)) and not isinstance(expires, bool):
+            return now < expires <= now + 600
+        try:
+            # An exclusive marker may still be in its short initial write.
+            return 0 <= now - path.stat().st_mtime < 5
+        except OSError:
+            return False
+
+    @contextmanager
+    def authorization_lock(self, account: str):
+        path = self.root / 'accounts' / profile_id(account) / 'authorization.lock'
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            if self.authorizing(account):
+                raise ValueError('Authorization is already in progress for this account') from None
+            path.unlink(missing_ok=True)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+                json.dump({'expires_at': time.time() + 420}, stream)
+            yield
+        finally:
+            path.unlink(missing_ok=True)
+
+    @contextmanager
+    def operation_lock(self, account: str, wait=False, cancel_event=None):
+        """Kernel-released lock shared by refresh/login/logout, including across clients."""
+        path = self.root / 'accounts' / profile_id(account) / 'operation.lock'
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        acquired = False
+        try:
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b'0')
+            deadline = time.monotonic() + (110 if wait else 0)
+            while True:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise InterruptedError('Account operation cancelled')
+                try:
+                    if os.name == 'nt':
+                        import msvcrt
+                        os.lseek(fd, 0, os.SEEK_SET)
+                        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    acquired = True
+                    break
+                except OSError as error:
+                    if error.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                        raise
+                    if time.monotonic() >= deadline:
+                        raise OperationBusy('Another operation is using this account; retry shortly') from None
+                    time.sleep(0.05)
+            yield
+        finally:
+            if acquired:
+                if os.name == 'nt':
+                    import msvcrt
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)

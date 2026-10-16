@@ -65,7 +65,7 @@ def main(argv=None):
         elif args.command == "refresh":
             result = refresh(store, args.account, args.codex)
             print(json.dumps(result, ensure_ascii=False, allow_nan=False))
-            return 0 if result["status"] == "ok" else 1
+            return 0 if result["status"] in {"ok", "authorizing", "busy"} else 1
         elif args.command == "show":
             print(json.dumps(store.snapshot(args.account), indent=2, ensure_ascii=False))
         else:

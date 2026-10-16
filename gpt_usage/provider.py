@@ -14,7 +14,7 @@ from collections import deque
 from pathlib import Path
 
 from .model import normalize_limits
-from .storage import Store, atomic_json
+from .storage import Store, atomic_json, OperationBusy
 
 
 class ProviderError(Exception):
@@ -84,7 +84,7 @@ class AppServer:
                 raise ProviderError("cli_start", "Unable to start Codex app-server") from None
             self.reader = threading.Thread(target=self._read, daemon=True)
             self.reader.start()
-            self.request("initialize", {"clientInfo": {"name": "gpt_usage_indicator", "version": "0.1.0"}})
+            self.request("initialize", {"clientInfo": {"name": "gpt_usage_indicator", "version": "0.2.0"}})
             self.send({"method": "initialized", "params": {}})
         except BaseException:
             # A SIGTERM/SystemExit during __enter__ does not trigger the with
@@ -207,8 +207,26 @@ def verify_account(result: dict, expected: str) -> dict:
 
 def refresh(store: Store, account_id: str, binary: str = "codex", timeout: float = 25,
             server_factory=AppServer, cancel_event=None) -> dict:
+    store.account(account_id)
+    if store.authorizing(account_id):
+        return _refresh_unlocked(store, account_id, binary, timeout, server_factory, cancel_event)
+    try:
+        with store.operation_lock(account_id, cancel_event=cancel_event):
+            return _refresh_unlocked(store, account_id, binary, timeout, server_factory, cancel_event)
+    except OperationBusy:
+        return store.snapshot(account_id) or {'schema_version': 1, 'account_id': account_id,
+            'status': 'busy', 'windows': {'five_hour': None, 'seven_day': None}}
+
+
+def _refresh_unlocked(store, account_id, binary, timeout, server_factory, cancel_event):
     profile = store.account(account_id)
     attempt = time.time()
+    if store.authorizing(account_id):
+        snapshot = {'schema_version': 1, 'account_id': account_id, 'label': profile['label'],
+                    'status': 'authorizing', 'updated_at': None, 'attempted_at': attempt,
+                    'windows': {'five_hour': None, 'seven_day': None}}
+        atomic_json(store.state_path(account_id), snapshot)
+        return snapshot
     try:
         home = store.home(account_id)
         home.mkdir(parents=True, exist_ok=True, mode=0o700)
