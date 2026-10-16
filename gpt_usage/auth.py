@@ -7,7 +7,7 @@ from .storage import Store, atomic_json
 
 
 def authorization_url(value):
-    if not isinstance(value, str) or len(value) > 16384:
+    if not isinstance(value, str) or len(value) > 16384 or any(char.isspace() or char == '\\' for char in value):
         raise ProviderError('invalid_auth_url', 'Invalid authorization URL')
     try:
         url = urlsplit(value)
@@ -76,3 +76,33 @@ def logout(store: Store, account: str, binary='codex', cancel_event=None, server
     args = [codex_command(binary), '-c', 'cli_auth_credentials_store="file"', 'app-server']
     with server_factory(args, home, 25, cancel_event=cancel_event) as server:
         server.request('account/logout', {})
+
+class AuthTask:
+    """Cancellable UI-independent worker, with a small public event queue."""
+    def __init__(self, store, account, binary='codex', action='login', device=False):
+        import queue
+        import threading
+        self.events = queue.Queue()
+        self.cancel_event = threading.Event()
+        self.account = account
+        def work():
+            success = False
+            try:
+                if action == 'logout':
+                    logout(store, account, binary, cancel_event=self.cancel_event)
+                    self.events.put({'event': 'logged_out'})
+                else:
+                    graphical_login(store, account, binary, emit=self.events.put,
+                                    cancel_event=self.cancel_event, device=device)
+                success = True
+            except ProviderError as error:
+                self.events.put({'event': 'error', 'message': str(error)})
+            except Exception:
+                self.events.put({'event': 'error', 'message': 'Cannot complete account operation; check the runtime and private data directory'})
+            finally:
+                self.events.put({'event': 'finished', 'success': success})
+        self.thread = threading.Thread(target=work, daemon=False)
+        self.thread.start()
+
+    def cancel(self):
+        self.cancel_event.set()

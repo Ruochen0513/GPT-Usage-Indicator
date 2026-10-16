@@ -13,3 +13,10 @@ assert.equal(validAccount('../private'), false);
 assert.equal(validAccount('work-1'), true);
 assert.deepEqual(color(10, true), color(90, false));
 console.log('GNOME presentation checks passed');
+const {authEvent} = await import('../gnome-extension/gpt-usage@local/auth-ui.mjs');
+assert.equal(authEvent('{"event":"authorization","url":"https://auth.openai.com/codex/device","code":"ABC"}').code, 'ABC');
+for (const url of ['http://auth.openai.com', 'https://evil.invalid', 'https://auth.openai.com.evil.invalid', 'https://auth.openai.com@evil.invalid', 'https://auth.openai.com\\evil.invalid'])
+    assert.throws(() => authEvent(JSON.stringify({event: 'authorization', url})));
+assert.equal(authEvent('{"event":"complete","email":"test@example.invalid"}').event, 'complete');
+assert.equal(authEvent('{"accounts":{}}'), null);
+console.log('GNOME authorization event checks passed');

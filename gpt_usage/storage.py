@@ -19,9 +19,13 @@ def profile_id(value: str) -> str:
 
 def default_data_dir() -> Path:
     if getattr(sys, "frozen", False):
-        executable = Path(sys.executable).resolve()
-        app = next((parent for parent in executable.parents if parent.suffix == ".app"), None)
-        return (app.parent if app else executable.parent) / ".runtime"
+        if sys.platform == 'win32':
+            base = Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData' / 'Local'))
+        elif sys.platform == 'darwin':
+            base = Path.home() / 'Library' / 'Application Support'
+        else:
+            base = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share'))
+        return base / 'gpt-usage-indicator'
     return Path(__file__).resolve().parent.parent / ".runtime"
 
 

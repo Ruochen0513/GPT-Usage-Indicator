@@ -3,10 +3,12 @@ from __future__ import annotations
 import queue
 import threading
 import time
+import webbrowser
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .model import number
+from .auth import AuthTask, authorization_url
 from .presentation import MODES, color, display, percent, preferences, reset_text
 from .provider import ProviderError, refresh
 from .storage import Store, atomic_json, default_data_dir, read_json
@@ -33,6 +35,12 @@ class UsageWindow:
         self.local_error = ""
         self.drag = None
         self.settings_window = None
+        self.auth_task = None
+        self.auth_pending = None
+        self.auth_url = ''
+        self.auth_status = tk.StringVar(value='Add a profile, then sign in with ChatGPT.')
+        self.auth_code = tk.StringVar(value='')
+        self.auth_widgets = []
         root.title("GPT Usage")
         root.configure(bg=BG)
         root.geometry("420x390")
@@ -85,6 +93,7 @@ class UsageWindow:
         self.read_snapshot()
         self.render()
         if auto_refresh: self.start_refresh()
+        if auto_refresh and not self.accounts: root.after(200, self.open_settings)
         self.tick_id = root.after(150, self.tick)
 
     def _button(self, parent, text, command):
@@ -114,8 +123,13 @@ class UsageWindow:
         self.snapshot = self.store.snapshot(account) if account else {}
 
     def _account_changed(self, *_):
+        if self.auth_task:
+            self.auth_task.cancel()
+        self.auth_pending = None
         self.cancel.set()
         self.generation += 1
+        self.snapshot = {}
+        self.local_error = ''
         self.prefs["account"] = self.account_var.get()
         self.local_error = ""
         self.save()
@@ -137,7 +151,7 @@ class UsageWindow:
         self.render()
 
     def start_refresh(self):
-        if self.closed or self.worker or not self.prefs["account"]:
+        if self.closed or self.worker or self.auth_task or self.auth_pending or not self.prefs["account"]:
             return
         self.cancel = threading.Event()
         event, generation, account = self.cancel, self.generation, self.prefs["account"]
@@ -160,6 +174,62 @@ class UsageWindow:
         self.worker.start()
         self.render()
 
+    def begin_auth(self, action='login', device=False):
+        if self.closed or self.auth_task or self.auth_pending:
+            return
+        if not self.prefs['account']:
+            self.auth_status.set('Add or select an account first.')
+            return
+        self.cancel.set()
+        self.pending = False
+        self.generation += 1
+        self.auth_url = ''
+        self.auth_code.set('')
+        self.auth_status.set('Starting secure sign-in…' if action == 'login' else 'Signing out…')
+        self.snapshot = {}
+        self.local_error = ''
+        self.auth_pending = (self.prefs['account'], action, device)
+
+    def open_authorization(self):
+        if self.auth_url:
+            try:
+                webbrowser.open(authorization_url(self.auth_url))
+            except Exception:
+                self.auth_status.set('Could not open the browser. Check your default browser and try Open authorization page again.')
+
+    def _poll_auth(self):
+        if self.auth_pending and not self.worker and not self.closed:
+            account, action, device = self.auth_pending
+            self.auth_pending = None
+            self.auth_task = AuthTask(self.store, account, self.binary, action, device)
+        task = self.auth_task
+        if task:
+            while True:
+                try:
+                    event = task.events.get_nowait()
+                except queue.Empty:
+                    break
+                if self.closed:
+                    continue
+                if event['event'] == 'authorization':
+                    self.auth_url = event['url']
+                    self.auth_code.set(event.get('code', ''))
+                    self.auth_status.set('Complete authorization in your browser, then return here.')
+                    self.open_authorization()
+                elif event['event'] == 'complete':
+                    self.auth_status.set(f"Signed in: {event['email']}")
+                    self.auth_url = ''; self.auth_code.set('')
+                elif event['event'] == 'logged_out':
+                    self.auth_status.set('Signed out. Quota cleared.')
+                elif event['event'] == 'error':
+                    self.auth_status.set(event['message'])
+            if not task.thread.is_alive() and task.events.empty():
+                task.thread.join()
+                self.auth_task = None
+                self.auth_url = ''; self.auth_code.set('')
+                self.read_snapshot()
+                self.next_refresh = time.monotonic() + self.prefs['interval']
+
     def tick(self):
         try:
             generation, result, error = self.results.get_nowait()
@@ -174,39 +244,44 @@ class UsageWindow:
                 self.start_refresh()
         except queue.Empty:
             pass
+        self._poll_auth()
         if self.closed:
-            if self.worker is None:
+            if self.worker is None and self.auth_task is None:
                 self.root.destroy()
                 return
         else:
             if self.auto_refresh and time.monotonic() >= self.next_refresh and not self.worker:
                 self.start_refresh()
             self.render()
-        self.tick_id = self.root.after(150 if self.worker else 1000, self.tick)
+        self.tick_id = self.root.after(150 if self.worker or self.auth_task or self.auth_pending else 1000, self.tick)
 
     def render(self):
         if self.closed: return
+        busy = bool(self.auth_task or self.auth_pending)
+        self.selector.configure(state='disabled' if busy else 'readonly')
+        for widget in self.auth_widgets:
+            if widget.winfo_exists(): widget.configure(state='disabled' if busy else 'normal')
         remaining, mode = self.prefs["remaining"], self.prefs["mode"]
         status, values = display(self.snapshot, self.prefs["account"], remaining,
                                  stale_after=max(600, self.prefs["interval"] * 2 + 120))
         if self.local_error: status, values = "error", [None, None]
         if not self.prefs["account"]: status = "setup"
         labels = {"ok": "LIVE", "stale": "STALE", "error": "OFFLINE", "unknown": "WAITING", "setup": "SETUP"}
-        self.badge.configure(text="SYNCING" if self.worker else labels.get(status, "WAITING"),
+        self.badge.configure(text="SIGNING IN" if self.auth_task or self.auth_pending else "SYNCING" if self.worker else labels.get(status, "WAITING"),
                              fg="#59d4ad" if status == "ok" else "#faba4a")
         identity = self.snapshot.get("identity")
         identity = identity if isinstance(identity, dict) else {}
         label = self.accounts.get(self.prefs["account"], {}).get("label", "Add an account in Settings")
         self.identity.configure(text=f'{label}  ·  {identity.get("email", "No verified login")}')
         self.basis_button.configure(text="Remaining" if remaining else "Used")
-        self.refresh_button.configure(state="disabled" if self.worker else "normal")
+        self.refresh_button.configure(state="disabled" if self.worker or self.auth_task or self.auth_pending else "normal")
         for key, button in self.mode_buttons.items():
             button.configure(bg="#2d4b51" if key == mode else CARD)
         error = self.snapshot.get("error")
         error = error if isinstance(error, dict) else {}
         detail = self.local_error or error.get("message")
         if not detail:
-            detail = "Create a profile, then log in using the CLI." if status == "setup" else "Data is stale · refresh to verify quota." if status == "stale" else "Codex subscription · " + ("remaining" if remaining else "used") + " allowance"
+            detail = "Open Settings to add an account and sign in." if status == "setup" else "Data is stale · refresh to verify quota." if status == "stale" else "Codex subscription · " + ("remaining" if remaining else "used") + " allowance"
         self.detail.configure(text=str(detail))
         canvas = self.canvas
         canvas.delete("all")
@@ -249,10 +324,16 @@ class UsageWindow:
         win.title("GPT Usage · Settings")
         win.configure(bg=BG)
         win.resizable(False, False)
+        def closed(event):
+            if event.widget is win:
+                self.auth_pending = None
+                if self.auth_task: self.auth_task.cancel()
+        win.bind('<Destroy>', closed)
         topmost = tk.BooleanVar(value=self.prefs["topmost"])
         interval = tk.StringVar(value=str(self.prefs["interval"]))
         opacity = tk.DoubleVar(value=self.prefs["opacity"])
         frame = tk.Frame(win, bg=BG, padx=18, pady=16)
+        self.auth_widgets = []
         frame.pack(fill="both", expand=True)
         def label(text):
             tk.Label(frame, text=text, bg=BG, fg=FG, anchor="w", wraplength=420, justify="left").pack(fill="x", pady=(7, 4))
@@ -280,7 +361,9 @@ class UsageWindow:
         for key, title in (("id", "Profile id (e.g. personal)"), ("label", "Display label"), ("email", "Expected ChatGPT email (optional)")):
             label(title)
             entries[key] = tk.StringVar()
-            ttk.Entry(frame, textvariable=entries[key]).pack(fill="x")
+            entry = ttk.Entry(frame, textvariable=entries[key])
+            entry.pack(fill="x")
+            self.auth_widgets.append(entry)
         def add():
             try:
                 key = entries["id"].get().strip()
@@ -289,19 +372,23 @@ class UsageWindow:
                 self.selector.configure(values=list(self.accounts))
                 self.account_var.set(key)
                 self._account_changed()
-                show_login()
+                self.begin_auth()
             except (ValueError, OSError) as exc:
                 messagebox.showerror("Cannot add profile", str(exc), parent=win)
-        self._button(frame, "Add profile", add).pack(fill="x", pady=8)
-        def show_login():
-            # Render an argv array, not a shell string with unsafe path interpolation.
-            import json
-            args = ["python", "-m", "gpt_usage", "--data-dir", str(self.store.root), "--codex", self.binary,
-                    "login", "--account", self.prefs["account"], "--device-auth"]
-            messagebox.showinfo("Account login", "From the project directory, run the login command in a terminal.\n"
-                "Arguments (JSON array; quote paths for your shell):\n\n" + json.dumps(args, ensure_ascii=False)
-                + "\n\nThen click Refresh. See README for copyable platform commands.", parent=win)
-        self._button(frame, "How to log in to selected account", show_login).pack(fill="x", pady=4)
+        add_button = self._button(frame, "Add account and sign in", add)
+        add_button.pack(fill="x", pady=8)
+        self.auth_widgets.append(add_button)
+        auth_buttons = tk.Frame(frame, bg=BG)
+        auth_buttons.pack(fill='x')
+        for title, action in [('Sign in', self.begin_auth), ('Device code', lambda: self.begin_auth(device=True)), ('Sign out', lambda: self.begin_auth(action='logout'))]:
+            button = self._button(auth_buttons, title, action)
+            button.pack(side='left', padx=2)
+            self.auth_widgets.append(button)
+        self._button(auth_buttons, 'Cancel', lambda: self.auth_task.cancel() if self.auth_task else setattr(self, 'auth_pending', None)).pack(side='left', padx=2)
+        tk.Label(frame, textvariable=self.auth_status, bg=BG, fg=FG, wraplength=420, justify='left').pack(fill='x', pady=8)
+        code = ttk.Entry(frame, textvariable=self.auth_code, state='readonly')
+        code.pack(fill='x')
+        self._button(frame, 'Open authorization page', self.open_authorization).pack(fill='x', pady=4)
         label(f"Private data: {self.store.root}")
 
     def close(self):
@@ -310,6 +397,8 @@ class UsageWindow:
         self.closed = True
         self.pending = False
         self.cancel.set()
+        self.auth_pending = None
+        if self.auth_task: self.auth_task.cancel()
         self.root.withdraw()
         if self.settings_window and self.settings_window.winfo_exists(): self.settings_window.destroy()
         # tick waits for bounded provider cleanup before destroying Tk.

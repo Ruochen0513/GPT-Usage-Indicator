@@ -89,3 +89,25 @@ class AuthTests(unittest.TestCase):
             server.request('early_login', {})
             result = server.wait_notification('account/login/completed', lambda event: event['loginId'] == 'early', timeout=1)
         self.assertTrue(result['success'])
+
+class WorkerTests(unittest.TestCase):
+    def test_worker_reports_errors_and_always_finishes(self):
+        from gpt_usage.auth import AuthTask
+        with patch('gpt_usage.auth.graphical_login', side_effect=RuntimeError('SECRET')):
+            task = AuthTask(None, 'personal')
+            task.thread.join(timeout=2)
+        self.assertFalse(task.thread.is_alive())
+        events = [task.events.get_nowait(), task.events.get_nowait()]
+        self.assertEqual([item['event'] for item in events], ['error', 'finished'])
+        self.assertNotIn('SECRET', json.dumps(events))
+
+    def test_worker_forwards_cancellation(self):
+        from gpt_usage.auth import AuthTask
+        def login(*args, **kwargs):
+            kwargs['cancel_event'].wait(timeout=2)
+            raise ProviderError('cancelled', 'Login cancelled')
+        with patch('gpt_usage.auth.graphical_login', side_effect=login):
+            task = AuthTask(None, 'personal')
+            task.cancel()
+            task.thread.join(timeout=2)
+        self.assertFalse(task.thread.is_alive())
