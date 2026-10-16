@@ -41,11 +41,34 @@ to an account in Settings. Source checkout and compilation are maintenance tasks
 - Original project boundary retained for local development outputs; no host extension
   installation, global credentials inspection, or real account authorization was done.
 
-## Remote build tracking
+## Remote build results
 
-The user supplied https://github.com/Ruochen0513/GPT-Usage-Indicator.git for native
-builds. It initially has no refs. Remote build results will be recorded after the
-first version-tag build. Until then, workflows are not evidence of native success.
+Uploaded reviewed code to the user-specified repository using its existing SSH
+access. The first `v0.2.0` tag points to commit `411b6e4`.
+
+- [Native checks on main](https://github.com/Ruochen0513/GPT-Usage-Indicator/actions/runs/38865428356): success (1m 4s).
+- [Native checks on v0.2.0](https://github.com/Ruochen0513/GPT-Usage-Indicator/actions/runs/38865428526): success (1m 0s).
+- [Downloadable application build](https://github.com/Ruochen0513/GPT-Usage-Indicator/actions/runs/38865428494): success (3m 24s).
+
+The release build completed all five platform jobs and its draft-release job.
+Verified artifact names on the public build summary:
+
+| Artifact | Reported size | User application inside |
+| --- | --- | --- |
+| release-win32-x64 | 118 MB | GPT-Usage-windows-x64.exe |
+| release-darwin-arm64 | 105 MB | GPT-Usage-macos-arm64.zip |
+| release-darwin-x64 | 114 MB | GPT-Usage-macos-x64.zip |
+| release-linux-x64 | 107 MB | gpt-usage-linux-x64.shell-extension.zip |
+| release-linux-arm64 | 100 MB | gpt-usage-linux-arm64.shell-extension.zip |
+
+The workflow created a `v0.2.0` draft with direct downloadable application assets,
+upstream redistribution notices and per-file checksums. It remains a draft for
+maintainer review; it was not publicly published. Owners can access it on the
+[repository Releases page](https://github.com/Ruochen0513/GPT-Usage-Indicator/releases).
+The Actions run also retains the five artifact downloads.
+
+A native build succeeding does not prove interactive OAuth or every OS UI behavior.
+No real ChatGPT account was used in these automated tests.
 
 ## Remaining target checks
 
