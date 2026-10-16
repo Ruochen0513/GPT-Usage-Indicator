@@ -33,7 +33,7 @@ export default class GPTUsageExtension extends Extension {
     }
 
     _dataDir() {
-        return this._settings.get_string('data-directory') || GLib.build_filenamev([this.path, 'runtime']);
+        return this._settings.get_string('data-directory') || GLib.build_filenamev([GLib.get_user_data_dir(), 'gpt-usage-indicator']);
     }
 
     _read(path) {

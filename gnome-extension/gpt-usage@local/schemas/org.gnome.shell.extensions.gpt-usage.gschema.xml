@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.gpt-usage" path="/org/gnome/shell/extensions/gpt-usage/">
-    <key name="data-directory" type="s"><default>''</default><summary>Absolute directory shared with the CLI; empty uses extension runtime</summary></key>
+    <key name="refresh-request" type="i"><default>0</default><summary>Notify the panel after account operations</summary></key>
+    <key name="data-directory" type="s"><default>''</default><summary>Absolute directory; empty uses the persistent user data directory</summary></key>
     <key name="account" type="s"><default>'personal'</default><summary>Selected account profile id</summary></key>
     <key name="display-mode" type="s"><default>'combined'</default><choices><choice value="text"/><choice value="rings"/><choice value="bars"/><choice value="combined"/></choices><summary>Panel presentation</summary></key>
     <key name="show-remaining" type="b"><default>true</default><summary>Display remaining percentage instead of used</summary></key>

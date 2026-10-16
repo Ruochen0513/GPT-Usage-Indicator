@@ -4,11 +4,13 @@ from __future__ import annotations
 import json
 import os
 import platform
+import sys
 import queue
 import shutil
 import subprocess
 import threading
 import time
+from collections import deque
 from pathlib import Path
 
 from .model import normalize_limits
@@ -22,6 +24,11 @@ class ProviderError(Exception):
 
 
 def codex_command(binary: str) -> str:
+    if binary in ('', 'codex'):
+        root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent.parent))
+        bundled = root / 'vendor' / ('codex.exe' if os.name == 'nt' else 'codex')
+        if bundled.is_file():
+            return str(bundled)
     resolved = shutil.which(binary)
     if not resolved:
         raise ProviderError("cli_missing", "Codex CLI not found; configure an absolute executable path")
@@ -65,6 +72,7 @@ class AppServer:
         self.stop = threading.Event()
         self.next_id = 0
         self.cancel_event = cancel_event
+        self.notifications = deque(maxlen=128)
 
     def __enter__(self):
         try:
@@ -118,6 +126,26 @@ class AppServer:
         self.send({"id": ident, "method": method, "params": params})
         deadline = time.monotonic() + self.timeout
         while True:
+            message = self._receive(deadline)
+            if not isinstance(message, dict):
+                continue
+            if "method" in message:
+                if "id" in message:
+                    self.send({"id": message["id"], "error": {"code": -32601, "message": "Unsupported client request"}})
+                else:
+                    self.notifications.append(message)
+                continue
+            if message.get("id") != ident:
+                continue
+            if "error" in message:
+                raise ProviderError("server_error", "Codex rejected the request; check login or retry")
+            result = message.get("result")
+            if not isinstance(result, dict):
+                raise ProviderError("invalid_response", "Invalid Codex response")
+            return result
+
+    def _receive(self, deadline):
+        while True:
             if self.cancel_event is not None and self.cancel_event.is_set():
                 raise ProviderError("cancelled", "Refresh cancelled")
             remaining = deadline - time.monotonic()
@@ -129,19 +157,22 @@ class AppServer:
                 continue
             if message is None:
                 raise ProviderError("disconnected", "Codex app-server closed unexpectedly")
-            if not isinstance(message, dict):
-                continue
-            if "method" in message and "id" in message:
-                self.send({"id": message["id"], "error": {"code": -32601, "message": "Unsupported client request"}})
-            if message.get("id") != ident or "method" in message:
-                continue
-            if "error" in message:
-                # Do not echo arbitrary server diagnostics: they could include credentials.
-                raise ProviderError("server_error", "Codex rejected the quota request; check login or retry")
-            result = message.get("result")
-            if not isinstance(result, dict):
-                raise ProviderError("invalid_response", "Invalid Codex response")
-            return result
+            return message
+
+    def wait_notification(self, method: str, predicate=lambda _: True, timeout=300):
+        deadline = time.monotonic() + timeout
+        while True:
+            for message in list(self.notifications):
+                params = message.get("params")
+                if message.get("method") == method and isinstance(params, dict) and predicate(params):
+                    self.notifications.remove(message)
+                    return params
+            message = self._receive(deadline)
+            if isinstance(message, dict) and "method" in message:
+                if "id" in message:
+                    self.send({"id": message["id"], "error": {"code": -32601, "message": "Unsupported client request"}})
+                else:
+                    self.notifications.append(message)
 
     def __exit__(self, *_):
         self.stop.set()

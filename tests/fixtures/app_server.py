@@ -21,6 +21,9 @@ for line in sys.stdin:
     elif method == 'raw_error':
         print(json.dumps({'id': msg['id'], 'error': {'message': 'SECRET_TOKEN_MUST_NOT_ESCAPE'}}), flush=True)
         continue
+    elif method == 'early_login':
+        print(json.dumps({'method': 'account/login/completed', 'params': {'loginId': 'early', 'success': True}}), flush=True)
+        result = {'loginId': 'early'}
     else:
         result = {'rateLimits': {'primary': {'usedPercent': 25, 'windowDurationMins': 300}}}
     print(json.dumps({'method': 'ignored/notification', 'params': {}}), flush=True)

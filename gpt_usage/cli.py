@@ -26,11 +26,12 @@ def main(argv=None):
     add.add_argument("--email", default="", help="Expected ChatGPT email; checked on every refresh")
     add.add_argument("--limit-id", default="codex")
     accounts.add_parser("list")
-    for name in ("login", "refresh", "show"):
+    for name in ("login", "logout", "refresh", "show"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--account", required=True)
         if name == "login":
             cmd.add_argument("--device-auth", action="store_true")
+            cmd.add_argument("--gui", action="store_true", help="Stream managed authorization events as JSONL")
     sub.add_parser("desktop")
     args = parser.parse_args(argv)
     store = Store(args.data_dir)
@@ -40,6 +41,16 @@ def main(argv=None):
                 store.add(args.id, args.label or args.id, args.email, args.limit_id)
             print(json.dumps(store.config(), indent=2, ensure_ascii=False))
         elif args.command == "login":
+            if args.gui:
+                from .auth import graphical_login
+                def emit(event):
+                    print(json.dumps(event, ensure_ascii=False), flush=True)
+                try:
+                    graphical_login(store, args.account, args.codex, emit, device=args.device_auth)
+                except (ProviderError, ValueError, OSError) as error:
+                    emit({'event': 'error', 'message': str(error) if isinstance(error, ProviderError) else 'Cannot complete login; check profile and data directory'})
+                    return 1
+                return 0
             store.account(args.account)
             home = store.home(args.account)
             home.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -47,6 +58,10 @@ def main(argv=None):
             if args.device_auth:
                 command.append("--device-auth")
             return subprocess.call(command, env=account_env(home), cwd=home)
+        elif args.command == "logout":
+            from .auth import logout
+            logout(store, args.account, args.codex)
+            print(json.dumps({'event': 'logged_out'}))
         elif args.command == "refresh":
             result = refresh(store, args.account, args.codex)
             print(json.dumps(result, ensure_ascii=False, allow_nan=False))
