@@ -1,342 +1,214 @@
 # GPT Usage Indicator
 
-在 GNOME 顶栏左上角、Windows 或 macOS 小窗口中，持续查看指定 ChatGPT 账号的 **Codex 订阅额度**：5 小时与 7 天两个窗口。
+直接安装 GNOME 插件，或双击 Windows / macOS 应用，在设置中登录 ChatGPT 账号，显示 **Codex 的 5 小时与 7 天订阅额度**。普通用户不需要克隆仓库或编译代码。
 
-支持百分比、双环、进度条、环图 + 数字四种视图，切换剩余／已用比例、多账号、自动刷新、重置时间。采用参考项目 [Agent Status Indicator](https://github.com/Ruochen0513/agent-status-indicator) 的“本地数据层 + 原生顶栏 + 跨平台小窗口”思路，额度协议与界面在本项目重新实现。
+支持百分比、双环、进度条、环图 + 数字四种呈现，剩余／已用切换、多账号、自动刷新、重置时间。架构参考 [Agent Status Indicator](https://github.com/Ruochen0513/agent-status-indicator)，本项目重新实现额度查询与界面。
 
-![功能示意图：示例数值，并非实机截图](docs/preview.svg)
+![功能示意，示例数值，并非实机截图](docs/preview.svg)
 
-> **额度范围**：此项目展示 Codex 官方 `account/rateLimits/read` 返回的订阅额度。ChatGPT 网页端各模型的消息次数、API 余额和 API token 消费不属于本项目的数据源。5 小时／7 天窗口仅在账号接口确实返回相应时长时显示；未提供的数据用 `—` 表示。
+## 下载与安装
 
-## 平台与依赖
+发行仓库：[Ruochen0513/GPT-Usage-Indicator](https://github.com/Ruochen0513/GPT-Usage-Indicator)。在 [Releases](https://github.com/Ruochen0513/GPT-Usage-Indicator/releases) 中选择对应平台的安装文件；维护者发布发行草稿后即可下载。
 
-| 平台 | 实现 | 运行依赖 | 验证状态 |
-| --- | --- | --- | --- |
-| GNOME 46–50 | 左侧原生 Shell 插件 | Python 3.10+、Codex CLI | Schema、打包、JS 语法与逻辑已测；实机加载待验 |
-| Windows | Tk 小窗口，`.cmd` / PowerShell 启动 | Python 3.10+（含 Tcl/Tk）、Codex CLI | 共享逻辑与 Windows 路径解析已测；原生运行待验 |
-| macOS | Tk 小窗口，`.command` / Shell 启动 | Python 3.10+（含 Tcl/Tk）、Codex CLI | 共享逻辑已测；原生运行待验 |
-| 其他 Linux 桌面 | 同一 Tk 小窗口 | Python 3.10+、Tkinter、Codex CLI | 无图形环境下的逻辑测试通过 |
+| 平台 | 下载文件 | 是否需要 Python / Codex |
+| --- | --- | --- |
+| GNOME，Intel/AMD 64 位 | `gpt-usage-linux-x64.shell-extension.zip` | 需要系统 Python 3.10+；Codex 已内置 |
+| GNOME，ARM64 | `gpt-usage-linux-arm64.shell-extension.zip` | 需要系统 Python 3.10+；Codex 已内置 |
+| Windows x64 | `GPT-Usage-windows-x64.exe` | 都不需要额外安装 |
+| macOS Apple Silicon | `GPT-Usage-macos-arm64.zip` | 都不需要额外安装 |
+| macOS Intel | `GPT-Usage-macos-x64.zip` | 都不需要额外安装 |
 
-运行核心不需要第三方 Python 包。安装 Codex CLI 并使用 ChatGPT 订阅登录；API key 登录不能提供这类订阅额度。安装方法见 [Codex CLI 官方文档](https://developers.openai.com/codex/cli/)。构建 GNOME ZIP 额外需要 `glib-compile-schemas`；Node.js 只用于开发时验证 JS。
+完整 GNOME 包包含官方原生 Codex 运行时，因此文件较大（x64 约 107 MiB）。另有不含运行时的小体积开发包 `gpt-usage@local.shell-extension.zip`，它需要系统另行提供 Codex，普通用户请选择上表中的完整包。
 
-## 快速开始：创建指定账号
+### GNOME
 
-以下命令都从**本项目根目录**执行，不需要安装 Python 包。
-
-Linux / macOS：
-
-```bash
-python3 -B bin/run.py account add personal --label "个人账号" --email "you@example.com"
-python3 -B bin/run.py login --account personal
-python3 -B bin/run.py refresh --account personal
-python3 -B bin/run.py show --account personal
-```
-
-Windows PowerShell：
-
-```powershell
-py -3 -B bin\run.py account add personal --label "个人账号" --email "you@example.com"
-py -3 -B bin\run.py login --account personal
-py -3 -B bin\run.py refresh --account personal
-py -3 -B bin\run.py show --account personal
-```
-
-将 `you@example.com` 换成真实 ChatGPT 邮箱。`--email` 可省略；配置后每次刷新都核对登录邮箱，防止登录到其他账号。登录由 Codex 官方流程处理，密码无需交给本项目。
-
-没有可用浏览器回调时，可以尝试设备授权：
+支持目标为 GNOME Shell 46–50。下载对应架构的 ZIP 后，在下载目录执行：
 
 ```bash
-python3 -B bin/run.py login --account personal --device-auth
+gnome-extensions install --force ./gpt-usage-linux-x64.shell-extension.zip
 ```
 
-设备授权是否可用取决于账号／组织策略。失败时使用普通 `login`。参见 [Codex 身份认证](https://developers.openai.com/codex/auth/)。
-
-**已有 Codex 登录不会自动导入**：每个 profile 使用项目内部独立的 `CODEX_HOME`，并明确使用文件凭据存储。需要为本项目登录一次。即使使用系统里的 Codex 进行日常工作，额度仍是账号共享的，查询本项目的同一账号即可看到该账号额度。
-
-## GNOME 插件
-
-### 构建与安装
-
-在 GNOME 主机上执行：
-
-```bash
-python3 -B scripts/package_extension.py
-gnome-extensions install --force dist/gpt-usage@local.shell-extension.zip
-```
-
-安装后按桌面提示重新登录，再启用：
+ARM64 用户换成相应文件名。重新登录桌面后，在 Extensions / 扩展管理器中启用 **GPT Usage Indicator**，打开其设置。也可以执行：
 
 ```bash
 gnome-extensions enable gpt-usage@local
 gnome-extensions prefs gpt-usage@local
 ```
 
-Wayland 通常需要退出当前桌面会话再登录。安装／启用是用户在目标机器执行的部署步骤；开发过程中未修改宿主桌面或系统扩展目录。无需 root。
+这两条是桌面插件的安装／管理命令，无需下载源码或在项目中构建。不需要 root。
 
-### 连接账号
+在插件设置的 Accounts 中：
 
-在插件 Preferences 中设置：
+1. 输入账号 profile id（例如 `personal`）、显示名称和可选的预期邮箱，点击 **Add account**。
+2. 选择该账号，点击 **Sign in**，在自动打开的官方网页中完成授权。
+3. 返回设置，看到登录邮箱后，额度会自动刷新到顶栏左侧。
 
-| 设置 | 建议值 |
+默认数据目录与运行时已经配置好，无需填写源码路径。顶栏菜单可以切换账号、查看重置时间、手动刷新或打开设置。
+
+若浏览器回调不可用，点击 **Device code**，在官方页面输入设置页显示的设备码。设备授权是否可用取决于账号／组织策略。**Cancel** 或关闭设置可取消当前授权；**Sign out** 清除该 profile 的登录与额度。
+
+### Windows
+
+下载 `GPT-Usage-windows-x64.exe`，双击运行即可。EXE 包含 Python/Tk 和 Codex 运行时，不需要安装 Python、Node.js、Codex，也不需要启动终端。
+
+首次运行自动打开 Settings：添加账号后自动进入官方浏览器授权。已有账号可点击 **Sign in** 重新登录，或使用 **Device code**。设置也支持退出账号和取消授权。
+
+### macOS
+
+按芯片选择 ZIP，解压后打开其中的 `gpt-usage-desktop.app`，首次运行在 Settings 添加账号并登录。应用已包含运行依赖。
+
+当前构建未配置开发者签名与公证；首次打开时系统可能要求确认来源。应用支持置顶、透明度、拖动、账号与视图切换。
+
+## 界面操作
+
+| 操作 | GNOME | 桌面小窗口 |
+| --- | --- | --- |
+| 切换账号 | 顶栏菜单或设置 | 顶部下拉列表 |
+| 切换视图 | 设置 → Presentation | Text / Rings / Bars / Combined |
+| 剩余／已用 | Show remaining quota | Remaining / Used |
+| 手动刷新 | 菜单 → Refresh now | Refresh |
+| 登录／退出／取消 | 设置 → Accounts | Settings |
+| 位置、置顶、透明度 | 由 Shell 顶栏管理 | 拖动标题，或 Settings |
+| 自动刷新 | 默认 120 秒，可设 30–3600 秒 | 相同 |
+
+浏览器授权只发生在 OpenAI 官方 HTTPS 页面。本项目不接收密码，授权链接和设备码仅在当前设置会话中显示。登录完成后核对邮箱，再刷新额度；若配置了预期邮箱，登录到其他邮箱会退出错误账号并提示。
+
+普通用户无需调整 Advanced。它用于设置自定义数据目录、Python 或 Codex 可执行文件；`codex` 默认优先使用发行包内置版本，找不到时才查找 PATH。
+
+## 额度含义
+
+展示的是 Codex `account/rateLimits/read` 返回的 **ChatGPT 订阅额度**，不是 ChatGPT 网页每个模型的消息次数，也不是 API 余额或 API token 计费。
+
+- 根据服务端窗口时长识别 300 分钟与 10080 分钟，不硬编码主／次窗口顺序。
+- 25% 已用对应 75% 剩余；可切换显示口径。
+- 某窗口未提供时显示 `—`，不会当成 0% 已用。
+- 超过 `max(600, 2 × 刷新间隔 + 120)` 秒未更新时显示过期，隐藏旧数值。
+- 到达重置时刻后等待重新查询，不推算成满额。
+- 网络、登录或身份校验失败时清除旧额度并提示原因。
+- 剩余大于 25% 为绿，10–25% 为黄，10% 及以下为红；未知为灰色。
+
+每个 profile 有独立的登录目录。共享数据目录的 GNOME 与桌面客户端会串行处理同一账号的查询、登录和退出，防止登录过程被定时查询覆盖。额度为同一 ChatGPT 账号共享，与从哪个客户端消耗无关。
+
+## 数据、更新与卸载
+
+| 版本 | 默认数据目录 |
 | --- | --- |
-| Account profile id | `personal`，与 CLI 创建的 id 一致 |
-| Absolute data directory | 本项目下 `.runtime` 的**绝对路径** |
-| Codex executable | `codex`，或原生 Codex 可执行文件的绝对路径 |
-| Python executable | `python3`，或 Python 3.10+ 的绝对路径 |
-| Presentation | Percentages / Dual rings / Progress bars / Rings + percentages |
-| Show remaining quota | 开启：剩余百分比；关闭：已用百分比 |
-| Refresh interval | 30–3600 秒，默认 120 秒 |
+| GNOME | `$XDG_DATA_HOME/gpt-usage-indicator`，默认 `~/.local/share/gpt-usage-indicator` |
+| Windows EXE | `%LOCALAPPDATA%\gpt-usage-indicator` |
+| macOS 应用 | `~/Library/Application Support/gpt-usage-indicator` |
+| Linux 原生桌面应用 | `$XDG_DATA_HOME/gpt-usage-indicator` |
+| 源码开发版 | 仓库中的 `.runtime/` |
 
-例如本次开发目录的 data directory 是：
+升级插件或替换 EXE/.app 保留这些数据；不在可执行文件目录中保存登录，放到受保护目录也不会因保存配置失败而无法使用。
 
-```text
-/home/yuhaozhang/code/project/OpenSource/show_usage_of_gpt/.runtime
-```
+数据包含 `accounts.json`、各 profile 的 `codex-home`、不含 token 的额度快照、窗口偏好。Codex 登录凭据使用各 profile 的文件存储，未使用系统钥匙串中的共用登录。POSIX 私有目录为 `0700`、JSON 为 `0600`，Windows 依赖当前用户目录 ACL。
 
-**路径输入后点击行内 Apply 按钮**。GNOME 从登录时的环境寻找命令，未必能看到终端中 nvm、venv 等设置的 PATH，遇到找不到命令时使用绝对路径。
-
-留空 data directory 时使用已安装扩展的 `runtime` 子目录，它与源码 CLI 的 `.runtime` 不同。建议显式设置项目的 `.runtime`，并保持其路径稳定，以免重装扩展时丢失配置。扩展 ZIP 已包含 Python 后端，运行时不依赖源码目录；账号数据目录可以独立放置。
-
-### 顶栏操作
-
-- 插件通过 GNOME panel 的 `left` 区域插入，显示在左侧。
-- 两个图形按 **5h、7d** 顺序排列；点击查看数值、账号、最后更新时间与重置时刻。
-- 菜单中可以切换已创建的账号、立即刷新、打开设置。
-- 插件启用后会立即刷新，之后定期刷新。查询异步执行，不阻塞 Shell。
-- 禁用插件会清理定时器、设置监听及当前查询子进程。
-
-## Windows 小窗口
-
-先按“快速开始”登录账号，再运行：
-
-```powershell
-.\bin\gpt-usage-desktop.cmd
-# 或
-powershell -ExecutionPolicy Bypass -File .\scripts\start-windows.ps1
-# 或
-py -3 -B bin\run.py desktop
-```
-
-默认从 PATH 找 Codex。Windows 的常见 npm `.cmd` 包装器会被解析到安装包内的原生 `codex.exe`；不会通过 shell 执行包装器。自定义包管理器布局无法识别时，显式提供原生文件路径：
-
-```powershell
-py -3 -B bin\run.py --codex 'C:\Tools\Codex\codex.exe' login --account personal
-py -3 -B bin\run.py --codex 'C:\Tools\Codex\codex.exe' desktop
-```
-
-在可写目录中使用便携版，避免放进受保护的 Program Files 目录。未打包的源码版依赖 `py -3` 和 Tkinter。
-
-## macOS 小窗口
-
-登录后启动：
-
-```bash
-bash scripts/start-macos.sh
-# 或
-bash bin/GPT-Usage.command
-# 或
-python3 -B bin/run.py desktop
-```
-
-源码仓库保留了 `.command` 的可执行权限，可以在 Finder 中打开。下载的 ZIP 若没有保留权限：
-
-```bash
-chmod +x bin/GPT-Usage.command
-```
-
-如果出现缺少 `_tkinter`，需要使用包含 Tcl/Tk 的 Python 发行版。可先检查：
-
-```bash
-python3 -c 'import tkinter; print(tkinter.TkVersion)'
-```
-
-## 小窗口操作
-
-- 顶部选择账号；显示 label 与已核对的邮箱。
-- 拖动标题 `GPT / USAGE` 或系统标题栏移动窗口。
-- `Remaining / Used` 切换剩余／已用百分比。
-- `Text / Rings / Bars / Combined` 切换视图。
-- `Refresh` 手动刷新；自动刷新默认每 120 秒一次。
-- `Settings` 设置置顶、透明度、刷新间隔，或新增账号 profile；登录仍在终端中完成。
-- 位置、视图、账号、透明度和置顶选项保存在 `desktop.json`，下次启动恢复。
-- 关闭窗口会取消在途请求，等待后端清理后退出；不常驻系统托盘。
-
-## 多账号与 CLI
-
-```bash
-python3 -B bin/run.py account add work --label "工作账号" --email "work@example.com"
-python3 -B bin/run.py login --account work
-python3 -B bin/run.py account list
-python3 -B bin/run.py refresh --account work
-```
-
-每个 profile 都有自己的登录目录与快照，UI 切换账号时立即清除旧账号显示，并忽略上一个账号的异步界面更新。
-
-自定义数据目录与 Codex 路径必须放在子命令前：
-
-```bash
-python3 -B bin/run.py --data-dir "/absolute/path/to/private-data" --codex "/absolute/path/to/codex" refresh --account work
-```
-
-| 命令 | 功能 |
-| --- | --- |
-| `account add ID --label LABEL --email EMAIL` | 创建 profile，邮箱可选 |
-| `account list` | 列出 profile；不显示凭据 |
-| `login --account ID [--device-auth]` | 在该 profile 的隔离目录登录 |
-| `refresh --account ID` | 查询官方接口并原子写入快照，输出 JSON |
-| `show --account ID` | 只读取本地快照 |
-| `desktop` | 启动跨平台窗口 |
-
-退出码：`0` 成功；`1` 查询失败但已写入错误快照；`2` 参数后的配置／本地操作错误。profile id 支持 1–48 位字母、数字、`_`、`-`，不允许目录穿越字符。`--limit-id` 可以选择其他服务端分组，默认 `codex`；只有 300 分钟与 10080 分钟的窗口会映射到此 UI。
-
-## 百分比、颜色与过期语义
-
-| 情况 | 显示 |
-| --- | --- |
-| `usedPercent = 25`，显示剩余 | `75%` |
-| `usedPercent = 25`，显示已用 | `25%` |
-| 接口缺失／不支持该窗口 | `—`，不补成 0% |
-| 距上次成功查询超过 `max(600, 2 × 刷新间隔 + 120)` 秒 | STALE，隐藏旧数值 |
-| 已到服务端提供的重置时间 | `—`，等待新的查询确认 |
-| 网络／登录／身份校验失败 | OFFLINE 或 Unavailable，显示错误原因，清空旧额度 |
-
-颜色始终按**剩余额度**判断，即使当前显示已用比例：大于 25% 为绿色，10–25% 为黄色，10% 及以下为红色。未知为灰色。环图从 12 点方向顺时针增长；已用模式增长表示消耗，剩余模式增长表示可用。
-
-不会把重置后的额度推算为满额，也不会把主／次窗口的位置硬编码成 5 小时／7 天，而是依据服务端 `windowDurationMins` 匹配。多分组接口优先，并且不会把不同分组的额度拼在一起。
-
-## 文件、凭据与网络
-
-源码版默认将**所有本项目数据**放在项目下的 `.runtime/`：
-
-```text
-.runtime/
-  accounts.json                         # profile 标签、预期邮箱、额度分组
-  accounts/<id>/codex-home/              # 隔离的 Codex 配置和登录凭据
-  snapshots/<id>.json                    # 无 token 的额度快照
-  desktop.json                          # 小窗口偏好
-```
-
-原生可执行程序默认在可执行文件旁创建 `.runtime`；macOS `.app` 使用应用包旁的 `.runtime`，与同目录的 CLI 共用。用 `--data-dir` 可覆盖默认位置。若将软件或凭据目录移到不可信设备，应重新登录并按需撤销相关会话。
-
-- `.runtime` 被 Git 忽略；打包采用明确的源码目录列表，不包含凭据或开发运行数据。
-- JSON 使用临时文件 + 原子替换；POSIX 新建私有目录为 `0700`、JSON 为 `0600`。Windows 依赖当前用户目录的 ACL。
-- 明确设置 `cli_auth_credentials_store="file"`，避免多个 profile 误用系统钥匙串中的共用登录。
-- 后端不自行解析或输出 access token，也不读取聊天记录。快照包含账号邮箱，仍属于私人数据。
-- 额度查询由 Codex CLI 联系官方服务；界面只读本地快照。需要网络，错误诊断不会原样记录服务端响应正文。
-- 只使用初始化与账号读取接口，不创建模型会话／turn，不为了测额度发送推理请求。
-- 无全局安装脚本、后台系统服务、注册表修改或自动设置开机启动；如需登录自启，可自行将启动器加入对应平台的登录项。
-- 配置界面与 CLI 应避免同时编辑账号列表。请勿在刷新或登录过程中手工修改同一个 profile 的凭据。
-
-## 构建发行包
-
-### GNOME ZIP
-
-```bash
-python3 -B scripts/package_extension.py
-```
-
-输出 `dist/gpt-usage@local.shell-extension.zip`，包含 GJS 界面、严格编译的 GSettings schema 和标准库 Python 后端。
-
-### 跨平台源码便携包
-
-```bash
-python3 -B scripts/package_desktop.py
-```
-
-输出 `dist/gpt-usage-desktop-portable.zip`。解压后按对应平台启动；仍需本机 Python、Tk 与 Codex CLI。此包不是已签名的原生安装程序。
-
-### 独立桌面可执行程序
-
-需要在**目标操作系统上**构建；不支持从 Linux 直接交叉编译出 Windows/macOS 应用。
-
-Linux / macOS：
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install --no-cache-dir 'pyinstaller>=6.11,<7'
-.venv/bin/python -B scripts/build_desktop.py
-```
-
-Windows：
-
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --no-cache-dir 'pyinstaller>=6.11,<7'
-.\.venv\Scripts\python.exe -B scripts\build_desktop.py
-```
-
-产物位于 `dist/desktop/`，包括控制台 `gpt-usage` 与窗口版 `gpt-usage-desktop`，macOS 还会生成 `.app`。独立版不需要额外安装 Python，但仍需要 Codex CLI。先用同目录的控制台程序创建 profile、登录，再打开窗口版。构建未配置签名／公证，系统可能提示未知发布者。
-
-仓库提供 `.github/workflows/check.yml`，在 Ubuntu、Windows、macOS 上运行测试并构建独立版。工作流未在本次本地开发中实际触发，不能将其视为已经通过的跨平台测试结果。
-
-## 开发与验证
-
-```bash
-python3 -B -m unittest discover -s tests -v
-node tests/test_ui.mjs
-node --input-type=module --check < gnome-extension/gpt-usage@local/extension.js
-node --input-type=module --check < gnome-extension/gpt-usage@local/prefs.js
-bash -n bin/gpt-usage bin/GPT-Usage.command scripts/start-macos.sh
-python3 -B scripts/package_extension.py
-python3 -B scripts/package_desktop.py
-git diff --check
-```
-
-测试只使用项目 `.runtime/tests` 中的临时目录与本地模拟 app-server，不读取真实账号、不会联网查询额度。图形测试需要可连接的 Tk display；没有显示服务时明确跳过。GNOME 打包测试在没有 `glib-compile-schemas` 的平台跳过。
-
-本次本地验证的完整记录与限制见 [最终自查](docs/reviews/final.md)，GNOME 先行自查见 [GNOME 审查](docs/reviews/gnome.md)。实机验收步骤见 [手工验收清单](docs/ACCEPTANCE.md)。
-
-## 故障排查
-
-| 现象 | 检查 |
-| --- | --- |
-| 一直 `—` | 运行 `refresh --account ID`，查看错误；核对 profile 与 data directory |
-| `login_required` | 为该 profile 执行 ChatGPT `login`，不要使用 API key 模式 |
-| `account_mismatch` | 重新登录预期邮箱，或修正 `accounts.json` 中的预期邮箱 |
-| `cli_missing` / `cli_wrapper` | 用 `--codex` 或 GNOME 设置填写原生二进制绝对路径 |
-| `unsupported_limits` | 服务未返回该分组，或 CLI 不支持此额度接口；更新 CLI 后重试 |
-| `timeout` / `server_error` | 检查网络、订阅登录状态，稍后手动刷新；服务端原文为隐私起见不输出 |
-| 顶栏找不到账号 | 设置的路径必须与创建 profile 的 CLI `--data-dir` 一致 |
-| GNOME 无法启动后端 | 核对 Python 3.10+ 与 Codex 的绝对路径，确认 ZIP 内有 backend |
-| 只有一个窗口有数值 | 账号服务只提供了一个已识别时长的窗口，另一个保持未知 |
-| 缺少 Tkinter / `_tkinter` | 为当前 Python 安装匹配的 Tcl/Tk，或使用包含 Tk 的发行版 |
-| Linux 上 `couldn't connect to display` | 从图形会话启动桌面窗口；无界面环境仍可使用 CLI |
-
-GNOME 状态查询：
-
-```bash
-gnome-extensions info gpt-usage@local
-```
-
-### 卸载
-
-关闭小窗口即可停止运行。GNOME 先执行：
+关闭窗口停止后台线程，禁用插件终止查询；没有系统常驻服务、注册表写入、全局 PATH 改动或自动登录项。卸载 GNOME：
 
 ```bash
 gnome-extensions disable gpt-usage@local
 gnome-extensions uninstall gpt-usage@local
 ```
 
-随后按需删除解压目录／原生应用。账号数据不会由卸载命令自动删除；确认不再需要后自行删除 `.runtime` 或自定义数据目录，这会删除本项目的登录凭据和设置。其他 Codex 客户端配置不在本项目管理范围内。
+Windows/macOS 关闭后删除应用即可。需要清除账号时先在设置中 Sign out；完全清除配置可删除上表对应目录。其他 Codex 客户端配置不由本项目管理。
 
-## 项目结构
+## 故障排查
 
-```text
-gpt_usage/         账号、存储、JSONL provider、CLI、Tk 窗口
-bin/               便携 CLI / Windows / macOS 启动入口
-gnome-extension/   GNOME Shell 插件、设置页、纯展示逻辑、schema
-scripts/           GNOME / 便携包 / 原生构建、平台启动脚本
-tests/             配额、隔离、取消、协议、打包、展示与 GUI 测试
-docs/              方案、示意图、审查与手工验收记录
-.github/workflows/ 三平台测试和构建流程
+| 现象 | 处理 |
+| --- | --- |
+| GNOME 看不到插件 | 确认 Shell 版本与 ZIP 架构，安装后重新登录并启用 |
+| Sign in 无法启动 | 完整包已含 Codex；GNOME 检查系统是否有 Python 3.10+，必要时在 Advanced 填绝对路径 |
+| 浏览器没有自动打开 | 点 Open authorization page，或尝试 Device code |
+| 授权超时／取消 | 再次 Sign in，关闭多余的授权页面 |
+| 邮箱不匹配 | 登录预期邮箱，或创建另一个 profile |
+| 一直显示 `—` | 核对登录状态、网络；账号可能未返回该时长窗口 |
+| 只有一个窗口有数字 | 另一个窗口未提供，保持未知是正常行为 |
+| 更新后旧数据不可见 | 若以前显式使用项目 `.runtime`，在 Advanced 指回其绝对路径即可 |
+| Linux 源码缺 Tkinter | 为所用 Python 安装匹配的 Tcl/Tk；GNOME 插件不需要 Tk |
+
+完整发行包使用固定版本 Codex。若官方协议发生变化，可更新发行版本；高级用户也可临时选择更新后的外部 Codex 二进制。程序不为查询额度启动模型 turn，不读取聊天记录；查询需连接官方服务。
+
+## 给维护者：构建与发布
+
+下面的步骤只供维护者。普通用户下载上表中的成品即可。
+
+### 自动构建发行文件
+
+[Build downloadable applications 工作流](.github/workflows/release.yml) 支持：
+
+- GitHub Actions → **Build downloadable applications** → **Run workflow**：构建五个平台文件，并提供下载 artifacts。
+- 推送 `v*` 标签：构建完成后创建一个包含直接下载附件的 **draft release**。维护者检查后发布，普通用户即可从 Releases 下载。
+
+矩阵包含 Windows x64、macOS ARM64 / Intel、GNOME x64 / ARM64。Windows EXE 和 macOS `.app` 必须在相应系统的 runner 上构建，不在 Linux 中伪造或交叉拼装。
+
+### 本地构建 GNOME 完整包
+
+```bash
+python3 -B scripts/fetch_codex.py --target linux-x64
+python3 -B scripts/package_extension.py --target linux-x64
+python3 -B scripts/package_release.py --target linux-x64
 ```
 
-## 技术参考与许可
+ARM64 换为 `linux-arm64`。本机不需要运行被打包的目标架构二进制。源码版轻量插件可只运行 `scripts/package_extension.py`。
 
-- [Codex App Server 官方协议](https://developers.openai.com/codex/app-server/)：初始化、`account/read`、`account/rateLimits/read` 与分组／窗口字段。
-- [Codex 身份认证](https://developers.openai.com/codex/auth/)：ChatGPT 登录、设备授权与凭据存储。
-- [GNOME 扩展 API](https://gjs.guide/extensions/topics/extension.html)、[Preferences](https://gjs.guide/extensions/development/preferences.html)、[异步子进程](https://gjs.guide/guides/gio/subprocesses.html)。
-- [Codex npm 启动器源码](https://github.com/openai/codex/blob/main/codex-cli/bin/codex.js)：平台原生可执行文件布局参考。
-- [Agent Status Indicator](https://github.com/Ruochen0513/agent-status-indicator)：架构与跨平台呈现方式参考；本项目未修改参考仓库。
+运行时来自 OpenAI 官方 `@openai/codex` npm 原生包，固定为 `0.163.0`；下载校验 npm 的 SHA-512 integrity，打包前再次校验原生文件 SHA-256，同时携带对应版本 LICENSE、NOTICE 和来源清单。只从归档提取明确的原生文件，不执行其中的安装脚本。
 
-MIT，见 [LICENSE](LICENSE)。本项目不是 OpenAI 官方产品。
+### 本地构建 Windows / macOS
+
+在对应操作系统安装 Python/Tk 与 PyInstaller，选择目标：`win32-x64`、`darwin-arm64` 或 `darwin-x64`。
+
+```bash
+python -m pip install --no-cache-dir 'pyinstaller>=6.11,<7'
+python -B scripts/fetch_codex.py --target win32-x64
+python -B scripts/build_desktop.py --bundle-codex
+python -B scripts/package_release.py --target win32-x64
+```
+
+macOS 替换 target。最终文件及 SHA-256 校验在 `dist/release/`，不是源码 ZIP；Windows 是单个 GUI EXE，macOS 使用 `ditto` 保存 `.app` 包结构。
+
+### 源码运行与 CLI
+
+开发依赖为 Python 3.10+；Tk 窗口另需 Tkinter，若没有内置运行时则需要系统 Codex。运行核心不依赖第三方 Python 库。
+
+```bash
+python3 -B bin/run.py account add personal --label Personal --email you@example.com
+python3 -B bin/run.py login --account personal
+python3 -B bin/run.py refresh --account personal
+python3 -B bin/run.py desktop
+```
+
+Windows 用 `py -3` 或附带 `.cmd`；macOS 可用 `bin/GPT-Usage.command`。源码 Settings 也支持图形授权。其他命令：
+
+| 命令 | 功能 |
+| --- | --- |
+| `account list` | 列出 profile，不输出凭据 |
+| `login --account ID --gui [--device-auth]` | 向图形客户端输出安全的授权 JSONL 事件 |
+| `logout --account ID` | 退出并清空额度 |
+| `show --account ID` | 读取快照 |
+| `--data-dir PATH --codex PATH` | 放在子命令前，自定义目录和运行时 |
+
+独立 profile 不自动导入其他 Codex 客户端的登录，需要登录一次。profile id 支持 1–48 位字母、数字、`_`、`-`，拒绝目录穿越。
+
+### 测试与自查
+
+```bash
+python3 -B -m unittest discover -s tests -v
+node tests/test_ui.mjs
+gjs -m tests/test_gjs.mjs
+node --input-type=module --check < gnome-extension/gpt-usage@local/extension.js
+node --input-type=module --check < gnome-extension/gpt-usage@local/prefs.js
+git diff --check
+```
+
+模拟测试只在仓库 `.runtime/tests` 写数据，不使用真实登录、不联网查询额度。无可连接 display 时 Tk 测试明确跳过。自查：[GNOME 阶段](docs/reviews/gnome.md)、[初版](docs/reviews/final.md)、[直接安装与图形登录升级](docs/reviews/distribution.md)。目标桌面的手工步骤见 [验收清单](docs/ACCEPTANCE.md)。构建成功不等于真实账号授权／桌面交互已全部实测。
+
+源码 `.runtime`、`build`、`dist` 不进入 Git；发行只携带指定程序、许可和校验信息，不包含开发账号数据。源码便携 ZIP 另由 `scripts/package_desktop.py` 生成，仅供开发用途。
+
+## 参考与许可
+
+- [官方 App Server 协议](https://developers.openai.com/codex/app-server/)：额度与受管理的浏览器／设备授权接口。
+- [官方认证说明](https://developers.openai.com/codex/auth/)。
+- [GNOME 扩展 API](https://gjs.guide/extensions/topics/extension.html)、[设置页](https://gjs.guide/extensions/development/preferences.html)。
+- [参考项目 Agent Status Indicator](https://github.com/Ruochen0513/agent-status-indicator)，未对参考仓库做修改。
+
+本项目为 MIT（[LICENSE](LICENSE)），内置 Codex 为 Apache-2.0，完整包随附上游许可与 NOTICE。本项目不是 OpenAI 官方产品。
