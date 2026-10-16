@@ -46,6 +46,16 @@ Sources:
   the supplied local HTTP proxy address. These do not make network requests.
 - JS syntax and strict schema compilation: pass during package creation.
 - Full Linux x64 runtime remains pinned and checksum-verified.
+- An anonymous HTTPS request through http://127.0.0.1:7897 to
+  https://auth.openai.com/.well-known/openid-configuration completed with verified
+  TLS and HTTP 200. No account credentials, cookies or tokens were sent. This
+  confirms that the listener accepts HTTP proxy connections and can reach that
+  public endpoint; it does not verify exit geography or OAuth token exchange.
+- Remote checks passed on both the release tag and main. The
+  [v0.2.1 release build](https://github.com/Ruochen0513/GPT-Usage-Indicator/actions/runs/38867877878)
+  succeeded for Linux x64/ARM64, Windows x64 and macOS x64/ARM64, and its draft
+  release job succeeded. The five downloadable artifacts include the bundled
+  native runtime; the GNOME packages contain the new proxy resolver and settings.
 
 ## Limits and remaining checks
 
