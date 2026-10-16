@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def main():
     output = ROOT / "dist" / "gpt-usage-desktop-portable.zip"
     output.parent.mkdir(exist_ok=True)
-    files = [ROOT / "README.md", ROOT / "LICENSE", ROOT / "pyproject.toml"]
+    files = [ROOT / "README.md", ROOT / "README.zh-CN.md", ROOT / "LICENSE", ROOT / "pyproject.toml"]
     for folder in ("gpt_usage", "bin", "docs", "scripts", "tests", "gnome-extension"):
         files += [path for path in (ROOT / folder).rglob("*")
                   if path.is_file() and "__pycache__" not in path.parts and "runtime" not in path.parts
