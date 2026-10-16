@@ -7,12 +7,15 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {view, color, percentText, resetText, validAccount} from './ui.mjs';
+import {resolveNetwork, launchHelper} from './proxy-resolver.js';
 
 export default class GPTUsageExtension extends Extension {
     enable() {
         this._enabled = true;
         this._generation = 0;
         this._process = null;
+        this._resolvingProxy = false;
+        this._proxyCancellable = null;
         this._timer = 0;
         this._watchdog = 0;
         this._settings = this.getSettings();
@@ -50,6 +53,9 @@ export default class GPTUsageExtension extends Extension {
     }
 
     _cancelRefresh() {
+        this._proxyCancellable?.cancel();
+        this._proxyCancellable = null;
+        this._resolvingProxy = false;
         if (this._watchdog) GLib.source_remove(this._watchdog);
         this._watchdog = 0;
         if (this._process) {
@@ -110,8 +116,9 @@ export default class GPTUsageExtension extends Extension {
             item.connect('activate', () => this._settings.set_string('account', id));
             menu.addMenuItem(item);
         }
-        const refresh = new PopupMenu.PopupMenuItem(this._process ? 'Refreshing…' : 'Refresh now');
-        refresh.setSensitive(!this._process);
+        const busy = this._process || this._resolvingProxy;
+        const refresh = new PopupMenu.PopupMenuItem(busy ? 'Refreshing…' : 'Refresh now');
+        refresh.setSensitive(!busy);
         refresh.connect('activate', () => this._refresh());
         menu.addMenuItem(refresh);
         const preferences = new PopupMenu.PopupMenuItem('Preferences');
@@ -119,8 +126,8 @@ export default class GPTUsageExtension extends Extension {
         menu.addMenuItem(preferences);
     }
 
-    _refresh() {
-        if (!this._enabled || this._process) return;
+    async _refresh() {
+        if (!this._enabled || this._process || this._resolvingProxy) return;
         const account = this._settings.get_string('account');
         if (!validAccount(account) || !GLib.path_is_absolute(this._dataDir())) {
             this._localError = 'Set an account id and an absolute data directory in Preferences';
@@ -129,10 +136,16 @@ export default class GPTUsageExtension extends Extension {
         }
         const generation = this._generation;
         try {
+            this._resolvingProxy = true;
+            this._proxyCancellable = new Gio.Cancellable();
+            const network = await resolveNetwork(this._settings.get_string('proxy-mode'), this._settings.get_string('proxy-url'), this._proxyCancellable);
+            if (!this._enabled || generation !== this._generation) return;
+            this._resolvingProxy = false;
+            this._proxyCancellable = null;
             const command = [this._settings.get_string('python-binary'), '-B',
                 GLib.build_filenamev([this.path, 'backend', 'run.py']), '--data-dir', this._dataDir(),
                 '--codex', this._settings.get_string('codex-binary'), 'refresh', '--account', account];
-            const proc = Gio.Subprocess.new(command, Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+            const proc = launchHelper(command, network.env, Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
             this._process = proc;
             this._localError = '';
             this._watchdog = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 115, () => {
@@ -158,8 +171,11 @@ export default class GPTUsageExtension extends Extension {
                 this._render();
             });
             this._render();
-        } catch (_) {
-            this._localError = 'Cannot start helper; check Python executable in Preferences';
+        } catch (error) {
+            if (!this._enabled || generation !== this._generation) return;
+            this._resolvingProxy = false;
+            this._proxyCancellable = null;
+            this._localError = error.message?.includes('proxy') || error.message?.includes('Proxy') ? error.message : 'Cannot start helper; check Python executable in Preferences';
             this._render();
         }
     }

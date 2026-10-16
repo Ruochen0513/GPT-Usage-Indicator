@@ -4,6 +4,7 @@ import time
 from urllib.parse import urlsplit
 from .provider import AppServer, ProviderError, codex_command, refresh, verify_account
 from .storage import Store, atomic_json
+from .network import service_error
 
 
 def authorization_url(value):
@@ -39,7 +40,7 @@ def graphical_login(store: Store, account: str, binary='codex', emit=lambda _: N
         with store.authorization_lock(account):
             with store.operation_lock(account, wait=True, cancel_event=cancel_event):
                 clear_snapshot(store, account)
-                with server_factory(args, home, 25, cancel_event=cancel_event) as server:
+                with server_factory(args, home, 25, cancel_event=cancel_event, purpose='auth') as server:
                     started = server.request('account/login/start', {'type': 'chatgptDeviceCode' if device else 'chatgpt'})
                     login_id = started.get('loginId')
                     if not isinstance(login_id, str) or not login_id:
@@ -54,6 +55,9 @@ def graphical_login(store: Store, account: str, binary='codex', emit=lambda _: N
                     emit(event)
                     completed = server.wait_notification('account/login/completed', lambda item: item.get('loginId') == login_id, timeout)
                     if completed.get('success') is not True:
+                        classified = service_error(completed.get('error'))
+                        if classified:
+                            raise ProviderError(*classified)
                         raise ProviderError('login_failed', 'Authorization was declined or failed; try again')
                     try:
                         identity = verify_account(server.request('account/read', {'refreshToken': False}), profile['expected_email'])
@@ -78,7 +82,7 @@ def logout(store: Store, account: str, binary='codex', cancel_event=None, server
     with store.authorization_lock(account):
         with store.operation_lock(account, wait=True, cancel_event=cancel_event):
             clear_snapshot(store, account)
-            with server_factory(args, home, 25, cancel_event=cancel_event) as server:
+            with server_factory(args, home, 25, cancel_event=cancel_event, purpose='auth') as server:
                 server.request('account/logout', {})
 
 class AuthTask:

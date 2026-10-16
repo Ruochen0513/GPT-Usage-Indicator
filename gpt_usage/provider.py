@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .model import normalize_limits
 from .storage import Store, atomic_json, OperationBusy
+from .network import apply_proxy, service_error
 
 
 class ProviderError(Exception):
@@ -56,16 +57,16 @@ def codex_command(binary: str) -> str:
     return resolved
 
 
-def account_env(home: Path) -> dict:
+def account_env(home: Path, purpose='quota') -> dict:
     env = os.environ.copy()
     for key in ("OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL"):
         env.pop(key, None)
     env["CODEX_HOME"] = str(home)
-    return env
+    return apply_proxy(env, purpose)
 
 
 class AppServer:
-    def __init__(self, command: list[str], home: Path, timeout: float = 25, cancel_event=None):
+    def __init__(self, command: list[str], home: Path, timeout: float = 25, cancel_event=None, purpose='quota'):
         self.command, self.home, self.timeout = command, home, timeout
         self.process = None
         self.messages = queue.Queue(maxsize=128)
@@ -73,18 +74,19 @@ class AppServer:
         self.next_id = 0
         self.cancel_event = cancel_event
         self.notifications = deque(maxlen=128)
+        self.purpose = purpose
 
     def __enter__(self):
         try:
             try:
                 self.process = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                                stderr=subprocess.DEVNULL, env=account_env(self.home),
+                                                stderr=subprocess.DEVNULL, env=account_env(self.home, self.purpose),
                                                 cwd=self.home, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             except OSError:
                 raise ProviderError("cli_start", "Unable to start Codex app-server") from None
             self.reader = threading.Thread(target=self._read, daemon=True)
             self.reader.start()
-            self.request("initialize", {"clientInfo": {"name": "gpt_usage_indicator", "version": "0.2.0"}})
+            self.request("initialize", {"clientInfo": {"name": "gpt_usage_indicator", "version": "0.2.1"}})
             self.send({"method": "initialized", "params": {}})
         except BaseException:
             # A SIGTERM/SystemExit during __enter__ does not trigger the with
@@ -138,6 +140,9 @@ class AppServer:
             if message.get("id") != ident:
                 continue
             if "error" in message:
+                classified = service_error(message['error'])
+                if classified:
+                    raise ProviderError(*classified)
                 raise ProviderError("server_error", "Codex rejected the request; check login or retry")
             result = message.get("result")
             if not isinstance(result, dict):

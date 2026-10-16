@@ -5,11 +5,14 @@ import Gtk from 'gi://Gtk';
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import {validAccount} from './ui.mjs';
 import {authEvent} from './auth-ui.mjs';
+import {resolveNetwork, launchHelper} from './proxy-resolver.js';
 
 export default class Preferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
         let closed = false, active = null, ids = [], loading = false;
+        let diagnostic = null;
+        let networkGroup = null;
         const dataDir = () => settings.get_string('data-directory') || GLib.build_filenamev([GLib.get_user_data_dir(), 'gpt-usage-indicator']);
         const page = new Adw.PreferencesPage({title: 'GPT Usage', icon_name: 'view-statistics-symbolic'});
         const accounts = new Adw.PreferencesGroup({title: 'Accounts', description: 'Add a profile and sign in here. Authorization opens the official ChatGPT page in your browser.'});
@@ -44,6 +47,7 @@ export default class Preferences extends ExtensionPreferences {
         const sensitive = busy => {
             for (const control of controls) control.set_sensitive(!busy);
             connection.set_sensitive(!busy);
+            networkGroup?.set_sensitive(!busy);
             cancel.set_sensitive(busy);
         };
         const notifyPanel = () => settings.set_int('refresh-request', (settings.get_int('refresh-request') + 1) % 2147483647);
@@ -73,22 +77,26 @@ export default class Preferences extends ExtensionPreferences {
             active = null;
             if (task.timer) GLib.source_remove(task.timer);
             task.cancellable.cancel();
-            try { task.process.send_signal(15); } catch (_) { /* Already exited. */ }
+            try { task.process?.send_signal(15); } catch (_) { /* Already exited. */ }
             if (!closed) {
                 sensitive(false); status.title = message; status.subtitle = 'You can try again.';
                 authorization.visible = false; code.visible = false;
             }
         };
-        const run = (args, kind, done = () => {}) => {
+        const run = async (args, kind, done = () => {}) => {
             if (active || closed) return;
             const dir = dataDir();
             if (!GLib.path_is_absolute(dir)) { status.title = 'Data directory must be absolute'; return; }
             const argv = [settings.get_string('python-binary'), '-B', GLib.build_filenamev([this.path, 'backend', 'run.py']),
                 '--data-dir', dir, '--codex', settings.get_string('codex-binary'), ...args];
+            const task = {process: null, cancellable: new Gio.Cancellable(), timer: 0, eof: false, exited: false, success: false, complete: false, failed: false};
+            active = task;
+            sensitive(true); status.title = 'Resolving proxy route…'; status.subtitle = '';
             try {
-                const proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
-                const task = {process: proc, cancellable: new Gio.Cancellable(), timer: 0, eof: false, exited: false, success: false, complete: false, failed: false};
-                active = task;
+                const network = kind === 'add' ? {env: {}} : await resolveNetwork(settings.get_string('proxy-mode'), settings.get_string('proxy-url'), task.cancellable);
+                if (active !== task || closed) return;
+                const proc = launchHelper(argv, network.env, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+                task.process = proc;
                 sensitive(true); status.title = kind === 'login' ? 'Starting secure sign-in…' : 'Working…'; status.subtitle = '';
                 authorization.visible = false; code.visible = false;
                 const finish = () => {
@@ -140,7 +148,11 @@ export default class Preferences extends ExtensionPreferences {
                     if (active === task) stop('Authorization timed out');
                     return GLib.SOURCE_REMOVE;
                 });
-            } catch (_) { sensitive(false); status.title = 'Cannot start account helper'; status.subtitle = 'Check the Python executable in Advanced.'; }
+            } catch (error) {
+                if (active !== task || closed) return;
+                const message = error.message?.includes('proxy') || error.message?.includes('Proxy') ? error.message : 'Cannot start account helper; check Python in Advanced.';
+                stop(message);
+            }
         };
         add.connect('clicked', () => {
             const key = id.text.trim();
@@ -163,7 +175,7 @@ export default class Preferences extends ExtensionPreferences {
             run(['logout', '--account', account], 'logout', () => { status.title = 'Signed out'; status.subtitle = 'Quota cleared.'; });
         });
         cancel.connect('clicked', () => stop());
-        window.connect('close-request', () => { closed = true; stop(); return false; });
+        window.connect('close-request', () => { closed = true; diagnostic?.cancel(); stop(); return false; });
         load();
         const modes = ['text', 'rings', 'bars', 'combined'];
         const mode = new Adw.ComboRow({title: 'Presentation', model: Gtk.StringList.new(['Percentages', 'Dual rings', 'Progress bars', 'Rings + percentages']),
@@ -171,6 +183,25 @@ export default class Preferences extends ExtensionPreferences {
         mode.connect('notify::selected', () => settings.set_string('display-mode', modes[mode.selected])); appearance.add(mode);
         const remaining = new Adw.SwitchRow({title: 'Show remaining quota', subtitle: 'Turn off to show used percentage'});
         settings.bind('show-remaining', remaining, 'active', Gio.SettingsBindFlags.DEFAULT); appearance.add(remaining);
+        networkGroup = new Adw.PreferencesGroup({title: 'Network proxy', description: 'The browser and Codex background process may use different routes. This setting applies to both sign-in and quota requests; it does not change system settings.'});
+        page.add(networkGroup);
+        const proxyModes = ['system', 'manual', 'environment'];
+        const proxyMode = new Adw.ComboRow({title: 'Proxy mode', model: Gtk.StringList.new(['GNOME system proxy / PAC', 'Manual proxy URL', 'Inherited launch environment']), selected: Math.max(0, proxyModes.indexOf(settings.get_string('proxy-mode')))});
+        proxyMode.connect('notify::selected', () => settings.set_string('proxy-mode', proxyModes[proxyMode.selected]));
+        const proxyAddress = new Adw.EntryRow({title: 'Manual URL (e.g. http://127.0.0.1:7897)', show_apply_button: true, text: settings.get_string('proxy-url')});
+        proxyAddress.connect('apply', () => settings.set_string('proxy-url', proxyAddress.text.trim()));
+        networkGroup.add(proxyMode); networkGroup.add(proxyAddress);
+        const routing = new Adw.ActionRow({title: 'Selected proxy route', subtitle: 'Checks routing configuration only; does not determine IP location or guarantee authorization.'});
+        const checkRoute = new Gtk.Button({label: 'Check route', valign: Gtk.Align.CENTER});
+        routing.add_suffix(checkRoute); networkGroup.add(routing);
+        checkRoute.connect('clicked', async () => {
+            diagnostic?.cancel(); diagnostic = new Gio.Cancellable(); checkRoute.sensitive = false;
+            try {
+                const result = await resolveNetwork(settings.get_string('proxy-mode'), settings.get_string('proxy-url'), diagnostic);
+                if (!closed) routing.subtitle = result.summary;
+            } catch (_) { if (!closed) routing.subtitle = 'Proxy lookup failed. Try Manual proxy with your local HTTP/mixed port.'; }
+            finally { if (!closed) checkRoute.sensitive = true; }
+        });
         for (const [key, title] of [['data-directory', 'Data directory (empty: persistent user data)'], ['codex-binary', 'Codex executable (codex: use bundled runtime)'], ['python-binary', 'Python executable']]) {
             const row = new Adw.EntryRow({title, show_apply_button: true, text: settings.get_string(key)});
             row.connect('apply', () => { settings.set_string(key, row.text.trim()); load(); }); connection.add(row);

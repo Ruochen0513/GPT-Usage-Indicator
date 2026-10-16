@@ -20,3 +20,11 @@ for (const url of ['http://auth.openai.com', 'https://evil.invalid', 'https://au
 assert.equal(authEvent('{"event":"complete","email":"test@example.invalid"}').event, 'complete');
 assert.equal(authEvent('{"accounts":{}}'), null);
 console.log('GNOME authorization event checks passed');
+const {proxyRoute, routeEnvironment} = await import('../gnome-extension/gpt-usage@local/network.mjs');
+assert.equal(proxyRoute('http://127.0.0.1:7897'), 'http://127.0.0.1:7897');
+assert.equal(proxyRoute('direct://'), 'direct');
+assert.equal(proxyRoute('socks5h://[::1]:7897'), 'socks5h://[::1]:7897');
+for (const bad of ['http://user:SECRET@host:7897', 'http://host:0', 'http://host:65536', 'file:///tmp/proxy', 'http://host/path'])
+    assert.throws(() => proxyRoute(bad));
+assert.deepEqual(routeEnvironment('http://127.0.0.1:7897', 'direct://'), {GPT_USAGE_AUTH_PROXY:'http://127.0.0.1:7897',GPT_USAGE_QUOTA_PROXY:'direct'});
+console.log('GNOME proxy route checks passed');

@@ -57,7 +57,7 @@ def main(argv=None):
             command = [codex_command(args.codex), "-c", 'cli_auth_credentials_store="file"', "login"]
             if args.device_auth:
                 command.append("--device-auth")
-            return subprocess.call(command, env=account_env(home), cwd=home)
+            return subprocess.call(command, env=account_env(home, 'auth'), cwd=home)
         elif args.command == "logout":
             from .auth import logout
             logout(store, args.account, args.codex)
