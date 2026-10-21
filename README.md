@@ -10,7 +10,7 @@ Choose percentages, dual rings, progress bars, or rings with percentages. Featur
 
 ## Download and install
 
-Repository: [Ruochen0513/GPT-Usage-Indicator](https://github.com/Ruochen0513/GPT-Usage-Indicator). Choose the file for your platform from [Releases](https://github.com/Ruochen0513/GPT-Usage-Indicator/releases). The `v0.2.1` builds passed for all five targets and produced a draft release: the repository owner can download its attachments, and other users can download them once the release is published. Files are also available in the [build artifacts](https://github.com/Ruochen0513/GPT-Usage-Indicator/actions/runs/38867877878).
+Repository: [Ruochen0513/GPT-Usage-Indicator](https://github.com/Ruochen0513/GPT-Usage-Indicator). Choose the file for your platform from [Releases](https://github.com/Ruochen0513/GPT-Usage-Indicator/releases). The `v0.3.0` builds passed for all five targets and produced a draft release: the repository owner can download its attachments, and other users can download them once the release is published. Files are also available in the [build artifacts](https://github.com/Ruochen0513/GPT-Usage-Indicator/actions/runs/39578055603).
 
 | Platform | Download | Python / Codex required? |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ A separate **submission candidate** is available for extensions.gnome.org. It ha
 not been approved or listed there. It targets **GNOME Shell 46** and uses UUID
 `gpt-usage@ruochen0513.github.io`.
 
-- **Extension:** `gpt-usage@ruochen0513.github.io.shell-extension.zip` (about 16 KB).
+- **Extension:** `gpt-usage@ruochen0513.github.io.shell-extension.zip` (about 14 KB).
   Contains only GJS, metadata, styles, the XML schema, and the license.
 - **Separate dependency:** `gpt-usage-companion-linux-x64.tar.gz` or
   `gpt-usage-companion-linux-arm64.tar.gz`. Download it from the release assets,

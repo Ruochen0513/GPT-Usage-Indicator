@@ -64,7 +64,16 @@ review, and maintain the submitted JavaScript.
   account, authentication, distribution, desktop-window, and proxy tests.
 - Node presentation/authentication/proxy checks and both existing GJS checks pass.
 - English/Chinese README command blocks match; local document links and Markdown
-  fences pass validation. The candidate ZIP is about 14 KiB (16 KB rounded on disk).
+  fences pass validation. The candidate ZIP is 13,424 bytes (16 KB allocated on disk).
+- Local Linux x64 companion archive: checksum, runtime/licenses, current backend
+  version, service source, and absence of account data verified. The portable
+  source archive includes both READMEs, companion sources, and the publishing guide.
+- [Main checks](https://github.com/Ruochen0513/GPT-Usage-Indicator/actions/runs/39577933337)
+  passed on Linux, Windows, and macOS. The
+  [v0.3.0 release build](https://github.com/Ruochen0513/GPT-Usage-Indicator/actions/runs/39578055603)
+  passed all five native targets and created its draft release. The Linux artifacts
+  include separate x64/ARM64 companion archives; the x64 artifact also carries the
+  architecture-independent EGO candidate ZIP and checksums. This is not an EGO upload.
 
 ## Remaining release and manual steps
 

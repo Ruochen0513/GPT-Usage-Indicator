@@ -10,7 +10,7 @@
 
 ## 下载与安装
 
-发行仓库：[Ruochen0513/GPT-Usage-Indicator](https://github.com/Ruochen0513/GPT-Usage-Indicator)。在 [Releases](https://github.com/Ruochen0513/GPT-Usage-Indicator/releases) 中选择对应平台的安装文件；当前 `v0.2.1` 五平台构建已通过并生成发行草稿：仓库所有者可下载草稿附件，公开发布后其他用户也可下载。也可从[本次构建的 Artifacts](https://github.com/Ruochen0513/GPT-Usage-Indicator/actions/runs/38867877878) 下载。
+发行仓库：[Ruochen0513/GPT-Usage-Indicator](https://github.com/Ruochen0513/GPT-Usage-Indicator)。在 [Releases](https://github.com/Ruochen0513/GPT-Usage-Indicator/releases) 中选择对应平台的安装文件；当前 `v0.3.0` 五平台构建已通过并生成发行草稿：仓库所有者可下载草稿附件，公开发布后其他用户也可下载。也可从[本次构建的 Artifacts](https://github.com/Ruochen0513/GPT-Usage-Indicator/actions/runs/39578055603) 下载。
 
 | 平台 | 下载文件 | 是否需要 Python / Codex |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ gnome-extensions prefs gpt-usage@local
 另提供适用于 extensions.gnome.org 的独立**上架候选版本**，尚未通过审核或上架。
 当前面向 **GNOME Shell 46**，UUID 为 `gpt-usage@ruochen0513.github.io`。
 
-- **扩展包**：`gpt-usage@ruochen0513.github.io.shell-extension.zip`，约 16 KB，
+- **扩展包**：`gpt-usage@ruochen0513.github.io.shell-extension.zip`，约 14 KB，
   仅含 GJS、元数据、样式、XML schema 和许可文件。
 - **独立依赖**：`gpt-usage-companion-linux-x64.tar.gz` 或
   `gpt-usage-companion-linux-arm64.tar.gz`。从发行附件下载、解压，在解压目录执行：
