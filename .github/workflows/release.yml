@@ -17,6 +17,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Bundle verified Codex runtime
         run: python -B scripts/fetch_codex.py --target '${{ matrix.target }}'
       - name: Build installable extension
@@ -25,6 +28,12 @@ jobs:
           sudo apt-get install -y libglib2.0-bin
           python -B scripts/package_extension.py --target '${{ matrix.target }}'
           python -B scripts/package_release.py --target '${{ matrix.target }}'
+          python -B scripts/package_companion.py --target '${{ matrix.target }}'
+      - name: Build source-only EGO submission candidate
+        if: matrix.target == 'linux-x64'
+        run: |
+          python -B scripts/package_ego.py
+          cp dist/ego/* dist/release/
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target }}

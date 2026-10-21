@@ -1,0 +1,8 @@
+{
+  "uuid": "gpt-usage@ruochen0513.github.io",
+  "name": "GPT Usage Indicator",
+  "description": "Show Codex subscription usage for the 5-hour and 7-day windows on the left of the top panel. Choose percentages, rings or bars. Requires the separately installed GPT Usage companion for Linux; see the homepage for installation. Sign in from Preferences. Unofficial project, not affiliated with OpenAI.",
+  "shell-version": ["46"],
+  "url": "https://github.com/Ruochen0513/GPT-Usage-Indicator",
+  "settings-schema": "org.gnome.shell.extensions.gpt-usage-ego"
+}

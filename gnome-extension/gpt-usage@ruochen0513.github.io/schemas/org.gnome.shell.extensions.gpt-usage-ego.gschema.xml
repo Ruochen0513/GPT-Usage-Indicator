@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.gpt-usage-ego" path="/org/gnome/shell/extensions/gpt-usage-ego/">
+    <key name="account" type="s"><default>'personal'</default><summary>Selected account profile</summary></key>
+    <key name="display-mode" type="s"><default>'combined'</default><choices><choice value="text"/><choice value="rings"/><choice value="bars"/><choice value="combined"/></choices><summary>Panel presentation</summary></key>
+    <key name="show-remaining" type="b"><default>true</default><summary>Show remaining rather than used quota</summary></key>
+    <key name="refresh-seconds" type="i"><default>120</default><range min="30" max="3600"/><summary>Refresh interval in seconds</summary></key>
+    <key name="refresh-request" type="i"><default>0</default><summary>Refresh after account operations</summary></key>
+    <key name="proxy-mode" type="s"><default>'system'</default><choices><choice value="system"/><choice value="manual"/><choice value="environment"/></choices><summary>Proxy selection mode</summary></key>
+    <key name="proxy-url" type="s"><default>''</default><summary>Manual HTTP or SOCKS proxy without credentials</summary></key>
+  </schema>
+</schemalist>
