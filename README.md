@@ -49,6 +49,36 @@ The default data directory and runtime are already configured; no source paths a
 
 If the browser callback is unavailable, click **Device code** and enter the displayed code on the official page. Availability depends on your account or organization policy. Click **Cancel** or close preferences to cancel authorization. **Sign out** clears the profile's login and quota data.
 
+### GNOME Extensions platform edition
+
+A separate **submission candidate** is available for extensions.gnome.org. It has
+not been approved or listed there. It targets **GNOME Shell 46** and uses UUID
+`gpt-usage@ruochen0513.github.io`.
+
+- **Extension:** `gpt-usage@ruochen0513.github.io.shell-extension.zip` (about 16 KB).
+  Contains only GJS, metadata, styles, the XML schema, and the license.
+- **Separate dependency:** `gpt-usage-companion-linux-x64.tar.gz` or
+  `gpt-usage-companion-linux-arm64.tar.gz`. Download it from the release assets,
+  extract it, and run the following from the extracted directory:
+
+```bash
+python3 -B install.py
+```
+
+The companion includes Codex and requires system GJS and Python 3.10+. It installs
+without root, starts through session D-Bus on demand, and exits after 60 idle
+seconds. The extension communicates over D-Bus and does not spawn commands or
+read credential files. Account sign-in remains in Preferences. Existing profiles
+in the standard data directory are shared with the full edition; proxy and
+appearance settings are separate. Disable the original edition before enabling
+this one to avoid duplicate indicators.
+
+The small extension ZIP belongs to `dist/ego/`; companion archives are under
+`dist/release/`. New release builds generate both. A draft release is visible only
+to its owner until published: make the companion downloads public before an EGO
+submission. See the [installation, local validation, and submission guide](docs/EGO-PUBLISHING.md).
+The complete GNOME packages above remain available for installation from GitHub.
+
 ### GNOME system proxy and sign-in errors (v0.2.1)
 
 The bundled Codex 0.163.0 runtime does not implement Linux system proxy resolution. A proxy configured in GNOME may therefore not reach its background process. The extension now uses GIO to resolve system proxy / PAC settings and explicitly passes the authentication and quota routes to their respective Codex processes.
@@ -167,6 +197,13 @@ python3 -B scripts/package_release.py --target linux-x64
 
 Use `linux-arm64` for ARM64. The build host does not need to run the packaged target binary. For the lightweight source extension, run only `scripts/package_extension.py`.
 
+For the source-only EGO candidate and its separately distributed companion:
+
+```bash
+python3 -B scripts/package_ego.py
+python3 -B scripts/package_companion.py --target linux-x64
+```
+
 The runtime comes from OpenAI's official native `@openai/codex` npm package, pinned to `0.163.0`. Downloads are checked against npm SHA-512 integrity metadata; the native file's SHA-256 is checked again before packaging. The matching LICENSE, NOTICE, and provenance manifest are included. Extraction is limited to explicitly selected native files, and archive installation scripts are not executed.
 
 ### Build Windows / macOS locally
@@ -217,7 +254,7 @@ node --input-type=module --check < gnome-extension/gpt-usage@local/prefs.js
 git diff --check
 ```
 
-Mock tests write data only under `.runtime/tests` in the repository. They do not use real logins or query quota over the network. Tk tests explicitly skip when no display is available. Self-reviews: [GNOME stage](docs/reviews/gnome.md), [initial release](docs/reviews/final.md), [direct installation and graphical sign-in](docs/reviews/distribution.md), and [GNOME proxy fix](docs/reviews/proxy.md). See the [acceptance checklist](docs/ACCEPTANCE.md) for manual checks on target desktops. Successful builds do not establish that all real-account authorization and desktop interactions have been tested.
+Mock tests write data only under `.runtime/tests` in the repository. They do not use real logins or query quota over the network. Tk tests explicitly skip when no display is available. The companion tests use a private session bus and a simulated helper, including installation, D-Bus activation, private authorization events, caller ownership, route isolation, and cancellation. Self-reviews: [GNOME stage](docs/reviews/gnome.md), [initial release](docs/reviews/final.md), [direct installation and graphical sign-in](docs/reviews/distribution.md), [GNOME proxy fix](docs/reviews/proxy.md), and [EGO edition](docs/reviews/ego.md). See the [acceptance checklist](docs/ACCEPTANCE.md) and [EGO guide](docs/EGO-PUBLISHING.md) for manual checks on target desktops. Successful builds do not establish that all real-account authorization and desktop interactions have been tested.
 
 The source `.runtime`, `build`, and `dist` directories are excluded from Git. Releases include only selected programs, licenses, and verification information, without development account data. `scripts/package_desktop.py` separately creates a portable source ZIP for development use.
 

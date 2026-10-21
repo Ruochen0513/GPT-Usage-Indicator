@@ -86,7 +86,7 @@ class AppServer:
                 raise ProviderError("cli_start", "Unable to start Codex app-server") from None
             self.reader = threading.Thread(target=self._read, daemon=True)
             self.reader.start()
-            self.request("initialize", {"clientInfo": {"name": "gpt_usage_indicator", "version": "0.2.1"}})
+            self.request("initialize", {"clientInfo": {"name": "gpt_usage_indicator", "version": "0.3.0"}})
             self.send({"method": "initialized", "params": {}})
         except BaseException:
             # A SIGTERM/SystemExit during __enter__ does not trigger the with

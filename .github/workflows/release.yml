@@ -93,4 +93,4 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         shell: bash
         run: |
-          gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --notes 'Download the GNOME ZIP, Windows EXE, or macOS application for your platform. Sign in from Settings; no source checkout, Python, or Codex installation is needed for the Windows/macOS builds. GNOME requires system Python 3.10+.' release/*
+          gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --notes 'Download the GNOME ZIP, Windows EXE, or macOS application for your platform. Sign in from Settings; no source checkout, Python, or Codex installation is needed for the Windows/macOS builds. The full GNOME package requires system Python 3.10+. The EGO submission candidate is a separate source-only ZIP and requires the Linux companion archive (system GJS and Python 3.10+). It has not been approved by extensions.gnome.org; see docs/EGO-PUBLISHING.md before submitting.' release/*

@@ -49,6 +49,29 @@ gnome-extensions prefs gpt-usage@local
 
 若浏览器回调不可用，点击 **Device code**，在官方页面输入设置页显示的设备码。设备授权是否可用取决于账号／组织策略。**Cancel** 或关闭设置可取消当前授权；**Sign out** 清除该 profile 的登录与额度。
 
+### GNOME 官方平台版本（候选）
+
+另提供适用于 extensions.gnome.org 的独立**上架候选版本**，尚未通过审核或上架。
+当前面向 **GNOME Shell 46**，UUID 为 `gpt-usage@ruochen0513.github.io`。
+
+- **扩展包**：`gpt-usage@ruochen0513.github.io.shell-extension.zip`，约 16 KB，
+  仅含 GJS、元数据、样式、XML schema 和许可文件。
+- **独立依赖**：`gpt-usage-companion-linux-x64.tar.gz` 或
+  `gpt-usage-companion-linux-arm64.tar.gz`。从发行附件下载、解压，在解压目录执行：
+
+```bash
+python3 -B install.py
+```
+
+配套程序已内置 Codex，需要系统提供 GJS 和 Python 3.10+。安装不需要 root，
+通过会话 D-Bus 按需启动，空闲 60 秒退出。扩展通过 D-Bus 通信，不启动外部命令，
+也不读取凭据文件；仍可在设置中登录账号。标准数据目录下的原有账号可直接共享，
+代理和外观设置则独立保存。启用此版本前请禁用原版，避免出现两个指示器。
+
+小体积扩展包生成于 `dist/ego/`，配套程序生成于 `dist/release/`，新的发行构建会同时生成两者。
+发行草稿在公开发布前仅所有者可见；提交 GNOME 审核前，需要先公开配套程序的下载。
+安装、本机验收和上传步骤见[上架指南](docs/EGO-PUBLISHING.md)。上表中的完整 GNOME 包继续供 GitHub 用户安装。
+
 ### GNOME 系统代理与登录 403（v0.2.1）
 
 内置 Codex 0.163.0 的 Linux 系统代理实现不可用，单纯在 GNOME 配置系统代理不一定会传入其后台进程。插件现在通过 GIO 解析系统代理／PAC，将登录与额度目标的路由显式传给各自的 Codex 进程。
@@ -167,6 +190,13 @@ python3 -B scripts/package_release.py --target linux-x64
 
 ARM64 换为 `linux-arm64`。本机不需要运行被打包的目标架构二进制。源码版轻量插件可只运行 `scripts/package_extension.py`。
 
+官方平台源码候选包与独立配套程序分别构建：
+
+```bash
+python3 -B scripts/package_ego.py
+python3 -B scripts/package_companion.py --target linux-x64
+```
+
 运行时来自 OpenAI 官方 `@openai/codex` npm 原生包，固定为 `0.163.0`；下载校验 npm 的 SHA-512 integrity，打包前再次校验原生文件 SHA-256，同时携带对应版本 LICENSE、NOTICE 和来源清单。只从归档提取明确的原生文件，不执行其中的安装脚本。
 
 ### 本地构建 Windows / macOS
@@ -217,7 +247,7 @@ node --input-type=module --check < gnome-extension/gpt-usage@local/prefs.js
 git diff --check
 ```
 
-模拟测试只在仓库 `.runtime/tests` 写数据，不使用真实登录、不联网查询额度。无可连接 display 时 Tk 测试明确跳过。自查：[GNOME 阶段](docs/reviews/gnome.md)、[初版](docs/reviews/final.md)、[直接安装与图形登录升级](docs/reviews/distribution.md)、[GNOME 代理修复](docs/reviews/proxy.md)。目标桌面的手工步骤见 [验收清单](docs/ACCEPTANCE.md)。构建成功不等于真实账号授权／桌面交互已全部实测。
+模拟测试只在仓库 `.runtime/tests` 写数据，不使用真实登录、不联网查询额度。无可连接 display 时 Tk 测试明确跳过。配套程序测试使用私有会话总线和模拟后台，覆盖安装、D-Bus 按需激活、私有授权事件、调用者归属、代理隔离和取消。自查：[GNOME 阶段](docs/reviews/gnome.md)、[初版](docs/reviews/final.md)、[直接安装与图形登录升级](docs/reviews/distribution.md)、[GNOME 代理修复](docs/reviews/proxy.md)、[官方平台版本](docs/reviews/ego.md)。目标桌面的手工步骤见[验收清单](docs/ACCEPTANCE.md)与[上架指南](docs/EGO-PUBLISHING.md)。构建成功不等于真实账号授权／桌面交互已全部实测。
 
 源码 `.runtime`、`build`、`dist` 不进入 Git；发行只携带指定程序、许可和校验信息，不包含开发账号数据。源码便携 ZIP 另由 `scripts/package_desktop.py` 生成，仅供开发用途。
 
